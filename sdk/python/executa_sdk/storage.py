@@ -65,12 +65,6 @@ METHOD_FILES_DOWNLOAD_URL = "files/download_url"
 METHOD_FILES_LIST = "files/list"
 METHOD_FILES_DELETE = "files/delete"
 
-METHOD_USER_FILES_UPLOAD_BEGIN = "user_files/upload_begin"
-METHOD_USER_FILES_UPLOAD_COMPLETE = "user_files/upload_complete"
-METHOD_USER_FILES_DOWNLOAD_URL = "user_files/download_url"
-METHOD_USER_FILES_LIST = "user_files/list"
-METHOD_USER_FILES_DELETE = "user_files/delete"
-
 
 # ─── Error codes ──────────────────────────────────────────────────────
 
@@ -310,17 +304,14 @@ class FilesClient(_BaseRpcClient):
                                      etag=resp.headers["etag"],
                                      size_bytes=os.path.getsize(p))
 
-    Default scope is ``"app"``. To access the user-wide file namespace
-    (e.g. files the user uploaded via the Anna chat UI) pass
-    ``scope="user"`` — the host then routes via ``user_files/*`` endpoints.
+    Default scope is ``"app"``. Pass ``scope="user"`` to access the user-wide
+    file namespace (e.g. files the user uploaded via the Anna chat UI) or
+    ``scope="tool"`` for tool-private files. The host server gates each scope
+    against the storage_token's ``allowed_scopes`` claim — calls to a scope
+    the user did not grant raise :data:`STORAGE_ERR_NOT_GRANTED`.
     """
 
     DEFAULT_TIMEOUT = 60.0
-
-    def _route(self, base: str, scope: str) -> str:
-        if scope == "user":
-            return base.replace("files/", "user_files/", 1)
-        return base
 
     async def upload_begin(
         self,
@@ -340,7 +331,7 @@ class FilesClient(_BaseRpcClient):
             params["content_type"] = content_type
         if metadata is not None:
             params["metadata"] = metadata
-        return await self._call(self._route(METHOD_FILES_UPLOAD_BEGIN, scope), params, timeout)
+        return await self._call(METHOD_FILES_UPLOAD_BEGIN, params, timeout)
 
     async def upload_complete(
         self,
@@ -360,7 +351,7 @@ class FilesClient(_BaseRpcClient):
             params["size_bytes"] = size_bytes
         if content_type is not None:
             params["content_type"] = content_type
-        return await self._call(self._route(METHOD_FILES_UPLOAD_COMPLETE, scope), params, timeout)
+        return await self._call(METHOD_FILES_UPLOAD_COMPLETE, params, timeout)
 
     async def download_url(
         self,
@@ -374,7 +365,7 @@ class FilesClient(_BaseRpcClient):
         params: Dict[str, Any] = {"path": path, "scope": scope}
         if expires_in is not None:
             params["expires_in"] = expires_in
-        return await self._call(self._route(METHOD_FILES_DOWNLOAD_URL, scope), params, timeout)
+        return await self._call(METHOD_FILES_DOWNLOAD_URL, params, timeout)
 
     async def list(
         self,
@@ -393,7 +384,7 @@ class FilesClient(_BaseRpcClient):
             params["cursor"] = cursor
         if limit is not None:
             params["limit"] = limit
-        return await self._call(self._route(METHOD_FILES_LIST, scope), params, timeout)
+        return await self._call(METHOD_FILES_LIST, params, timeout)
 
     async def delete(
         self,
@@ -404,7 +395,7 @@ class FilesClient(_BaseRpcClient):
     ) -> dict:
         """Returns ``{"deleted": True}`` (idempotent)."""
         return await self._call(
-            self._route(METHOD_FILES_DELETE, scope), {"path": path, "scope": scope}, timeout
+            METHOD_FILES_DELETE, {"path": path, "scope": scope}, timeout
         )
 
 
@@ -457,11 +448,6 @@ __all__ = [
     "METHOD_FILES_DOWNLOAD_URL",
     "METHOD_FILES_LIST",
     "METHOD_FILES_DELETE",
-    "METHOD_USER_FILES_UPLOAD_BEGIN",
-    "METHOD_USER_FILES_UPLOAD_COMPLETE",
-    "METHOD_USER_FILES_DOWNLOAD_URL",
-    "METHOD_USER_FILES_LIST",
-    "METHOD_USER_FILES_DELETE",
     "STORAGE_ERR_NOT_GRANTED",
     "STORAGE_ERR_NOT_FOUND",
     "STORAGE_ERR_PRECONDITION_FAILED",

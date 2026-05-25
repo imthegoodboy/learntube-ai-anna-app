@@ -19,7 +19,6 @@ from executa_sdk.storage import (
     METHOD_STORAGE_GET,
     METHOD_STORAGE_LIST,
     METHOD_STORAGE_SET,
-    METHOD_USER_FILES_DOWNLOAD_URL,
     STORAGE_ERR_QUOTA_EXCEEDED,
     StorageClient,
     StorageError,
@@ -129,7 +128,7 @@ async def test_files_upload_begin():
 
 
 @pytest.mark.asyncio
-async def test_files_user_scope_routes_to_user_files():
+async def test_files_user_scope_passes_scope_param():
     host = _FakeHost()
     client = FilesClient(write_frame=host.write)
     task = asyncio.create_task(
@@ -137,7 +136,10 @@ async def test_files_user_scope_routes_to_user_files():
     )
     await asyncio.sleep(0)
     env = host.frames[0]
-    assert env["method"] == METHOD_USER_FILES_DOWNLOAD_URL
+    # Unified files/* method; scope travels as a normal param
+    assert env["method"] == METHOD_FILES_DOWNLOAD_URL
+    assert env["params"]["scope"] == "user"
+    assert env["params"]["path"] == "Documents/contract.pdf"
     client.dispatch_response(
         {"jsonrpc": "2.0", "id": env["id"], "result": {"url": "https://signed"}}
     )

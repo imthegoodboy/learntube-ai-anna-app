@@ -153,15 +153,28 @@ class SamplingClient:
                 ``[{"role":"user","content":{"type":"text","text":"..."}}]``
             max_tokens:        Required; per-call cap (host enforces hard upper bound).
             system_prompt:     Optional system message.
-            temperature:       Optional sampling temperature.
+            temperature:       Optional sampling temperature. Host substitutes
+                ``0.7`` when ``None`` — it does **not** defer to the provider
+                default.
             stop_sequences:    Optional stop strings.
             model_preferences: MCP-style ``{"hints":[{"name":"..."}],
                                 "costPriority":0..1, "speedPriority":..., "intelligencePriority":...}``.
                 Omit (None) to let the host fall back to the user's saved
                 ``preferred_model``.
-            include_context:   Phase 1 only supports ``"none"``.
-            metadata:          Arbitrary string→string map for audit/tracing.
-            timeout:           Wall-clock seconds before raising ``asyncio.TimeoutError``.
+            include_context:   Reserved. Phase 1 requires ``"none"``; any other
+                value is rejected with ``SAMPLING_ERR_INVALID_REQUEST``.
+            metadata:          **Reserved / not yet consumed by host.** Forwarded
+                on the wire but currently dropped by the Nexus gate (no audit,
+                no logging, no propagation to token-usage records). Do not rely
+                on it for tracing until host support lands.
+            timeout:           Client-side wall-clock seconds before raising
+                ``asyncio.TimeoutError``. Also propagated to the host on the
+                wire as ``_clientTimeoutS`` so that matrix-agent (HTTP) and
+                nexus-gate (ChatOpenAI ``timeout`` + ``asyncio.wait_for``) can
+                cap their own deadlines inside this budget — preventing a
+                "ghost success" where the host completes and bills after the
+                client has already given up. Host clamps the derived model
+                budget to ``[30s, 300s]``.
         """
         if self._sampling_disabled_reason:
             raise SamplingError(
@@ -181,6 +194,11 @@ class SamplingClient:
             "messages": messages,
             "maxTokens": max_tokens,
             "includeContext": include_context,
+            # Private hint to host: how long the client is willing to wait.
+            # Lets matrix-agent + nexus-gate cap their own HTTP / model
+            # timeouts inside the client's budget so we don't end up with
+            # a "ghost success" (host completed + billed after client gave up).
+            "_clientTimeoutS": float(timeout),
         }
         if system_prompt is not None:
             params["systemPrompt"] = system_prompt

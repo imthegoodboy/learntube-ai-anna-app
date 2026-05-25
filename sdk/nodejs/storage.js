@@ -51,12 +51,6 @@ const METHOD_FILES_DOWNLOAD_URL = "files/download_url";
 const METHOD_FILES_LIST = "files/list";
 const METHOD_FILES_DELETE = "files/delete";
 
-const METHOD_USER_FILES_UPLOAD_BEGIN = "user_files/upload_begin";
-const METHOD_USER_FILES_UPLOAD_COMPLETE = "user_files/upload_complete";
-const METHOD_USER_FILES_DOWNLOAD_URL = "user_files/download_url";
-const METHOD_USER_FILES_LIST = "user_files/list";
-const METHOD_USER_FILES_DELETE = "user_files/delete";
-
 const STORAGE_ERR_NOT_GRANTED = -32021;
 const STORAGE_ERR_NOT_FOUND = -32022;
 const STORAGE_ERR_PRECONDITION_FAILED = -32023;
@@ -200,11 +194,6 @@ class StorageClient extends _BaseRpcClient {
 }
 
 class FilesClient extends _BaseRpcClient {
-  static _route(base, scope) {
-    if (scope === "user") return base.replace("files/", "user_files/");
-    return base;
-  }
-
   /**
    * Returns `{ upload_id, put_url, headers, expires_at }`.
    * @param {{ path: string, size_bytes?: number, content_type?: string, metadata?: object, scope?: string, timeoutMs?: number }} opts
@@ -215,7 +204,7 @@ class FilesClient extends _BaseRpcClient {
     if (size_bytes != null) params.size_bytes = size_bytes;
     if (content_type != null) params.content_type = content_type;
     if (metadata != null) params.metadata = metadata;
-    return this._call(FilesClient._route(METHOD_FILES_UPLOAD_BEGIN, scope), params, timeoutMs);
+    return this._call(METHOD_FILES_UPLOAD_BEGIN, params, timeoutMs);
   }
 
   /**
@@ -228,7 +217,7 @@ class FilesClient extends _BaseRpcClient {
     if (etag != null) params.etag = etag;
     if (size_bytes != null) params.size_bytes = size_bytes;
     if (content_type != null) params.content_type = content_type;
-    return this._call(FilesClient._route(METHOD_FILES_UPLOAD_COMPLETE, scope), params, timeoutMs);
+    return this._call(METHOD_FILES_UPLOAD_COMPLETE, params, timeoutMs);
   }
 
   /**
@@ -239,7 +228,7 @@ class FilesClient extends _BaseRpcClient {
     const { path, expires_in, scope = "app", timeoutMs = 30_000 } = opts;
     const params = { path, scope };
     if (expires_in != null) params.expires_in = expires_in;
-    return this._call(FilesClient._route(METHOD_FILES_DOWNLOAD_URL, scope), params, timeoutMs);
+    return this._call(METHOD_FILES_DOWNLOAD_URL, params, timeoutMs);
   }
 
   list(opts = {}) {
@@ -248,12 +237,12 @@ class FilesClient extends _BaseRpcClient {
     if (prefix != null) params.prefix = prefix;
     if (cursor != null) params.cursor = cursor;
     if (limit != null) params.limit = limit;
-    return this._call(FilesClient._route(METHOD_FILES_LIST, scope), params, timeoutMs);
+    return this._call(METHOD_FILES_LIST, params, timeoutMs);
   }
 
   delete(opts) {
     const { path, scope = "app", timeoutMs = 30_000 } = opts;
-    return this._call(FilesClient._route(METHOD_FILES_DELETE, scope), { path, scope }, timeoutMs);
+    return this._call(METHOD_FILES_DELETE, { path, scope }, timeoutMs);
   }
 }
 
@@ -287,11 +276,6 @@ module.exports = {
   METHOD_FILES_DOWNLOAD_URL,
   METHOD_FILES_LIST,
   METHOD_FILES_DELETE,
-  METHOD_USER_FILES_UPLOAD_BEGIN,
-  METHOD_USER_FILES_UPLOAD_COMPLETE,
-  METHOD_USER_FILES_DOWNLOAD_URL,
-  METHOD_USER_FILES_LIST,
-  METHOD_USER_FILES_DELETE,
   STORAGE_ERR_NOT_GRANTED,
   STORAGE_ERR_NOT_FOUND,
   STORAGE_ERR_PRECONDITION_FAILED,

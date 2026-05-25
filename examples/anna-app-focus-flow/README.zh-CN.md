@@ -38,7 +38,7 @@ anna-app dev --executa dir=./executas/focus-session-go,type=go
 ```
 
 完整发现规则与 `executa.json` schema 参见
-[`docs/multi-language-anna-apps.md`](../../docs/multi-language-anna-apps.md)。
+[anna-app CLI 参考](https://anna.talentai.com/developers/reference/cli)。
 
 ---
 
