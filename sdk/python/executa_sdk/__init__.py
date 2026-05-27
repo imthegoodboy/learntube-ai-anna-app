@@ -46,6 +46,7 @@ from .host_upload import (  # noqa: F401
     UploadError,
     METHOD_HOST_UPLOAD_FILE,
 )
+from .context import InvokeContext  # noqa: F401
 
 __all__ = [
     "SamplingClient",
@@ -61,6 +62,7 @@ __all__ = [
     "ImageError",
     "HostUploadClient",
     "UploadError",
+    "InvokeContext",
     "PROTOCOL_VERSION_V1",
     "PROTOCOL_VERSION_V2",
     "METHOD_INITIALIZE",
