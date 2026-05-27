@@ -6,11 +6,25 @@
 
 "use strict";
 
+// Must match the manifest's required_executas[].tool_id and the
+// Executa plugin's MANIFEST.name (see executas/llm-via-executa-python/).
+const EXECUTA_TOOL_ID = "tool-test-llm-via-executa-12345678";
+const EXECUTA_METHOD = "complete";
+
+const MODE_HINTS = {
+  direct:
+    "Calls the host LLM directly from the iframe (anna.llm.complete).",
+  executa:
+    "Invokes the Executa, which then asks the host to sample (sampling/createMessage). Requires --real LLM bridge; mock fixtures do not serve reverse sampling.",
+};
+
 const $ = (id) => document.getElementById(id);
 const out = $("complete-out");
 const runOut = $("run-out");
 const errBox = $("errors");
 const sessionUuidEl = $("session-uuid");
+const modeSel = $("llm-mode");
+const modeHint = $("mode-hint");
 
 let session = null;
 
@@ -42,26 +56,43 @@ function clearError() {
 }
 
 // ──────────────────────────────────────────────────────────
-// 1. llm.complete
+// 1. completion — either anna.llm.complete (direct) or
+//    anna.tools.invoke against the llm-via-executa plugin which
+//    in turn issues sampling/createMessage to the host.
+
+modeSel?.addEventListener("change", () => {
+  modeHint.textContent = MODE_HINTS[modeSel.value] || "";
+});
+
+async function runDirect(prompt) {
+  const anna = await annaReady;
+  return anna.llm.complete({
+    messages: [{ role: "user", content: { type: "text", text: prompt } }],
+    maxTokens: 256,
+  });
+}
+
+async function runViaExecuta(prompt) {
+  const anna = await annaReady;
+  return anna.tools.invoke({
+    tool_id: EXECUTA_TOOL_ID,
+    method: EXECUTA_METHOD,
+    args: { prompt, max_tokens: 256 },
+  });
+}
 
 $("complete-btn").addEventListener("click", async () => {
   clearError();
-  out.textContent = "(calling llm.complete…)";
+  const mode = modeSel?.value || "direct";
+  out.textContent = `(calling ${mode === "executa" ? "executa.complete" : "llm.complete"}…)`;
   try {
-    const anna = await annaReady;
-    const reply = await anna.llm.complete({
-      messages: [
-        {
-          role: "user",
-          content: { type: "text", text: $("complete-input").value || "hi" },
-        },
-      ],
-      maxTokens: 256,
-    });
+    const prompt = $("complete-input").value || "hi";
+    const reply =
+      mode === "executa" ? await runViaExecuta(prompt) : await runDirect(prompt);
     out.textContent = JSON.stringify(reply, null, 2);
   } catch (err) {
     out.textContent = "(failed)";
-    showError("llm.complete", err);
+    showError(mode === "executa" ? "tools.invoke" : "llm.complete", err);
   }
 });
 

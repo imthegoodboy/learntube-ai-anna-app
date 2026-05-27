@@ -1,0 +1,6 @@
+{
+  "tool_id": "tool-test-llm-via-executa-12345678",
+  "type": "python",
+  "enabled": true,
+  "_comment": "Auto-discovered by `anna-app dev` when launched from the app root. Exposes a `complete` tool that wraps host sampling/createMessage. Disable here if you want to test the app without the Executa-LLM path."
+}

@@ -10,16 +10,27 @@
     <header>
       <h1>anna-app LLM Demo</h1>
       <p class="muted">
-        Exercises <code>anna.llm.complete</code>,
-        <code>anna.agent.session({ submode: "auto" })</code>, and
-        <code>session.history()</code>.
+        Exercises <code>anna.llm.complete</code> (direct),
+        <code>anna.tools.invoke</code> against an Executa that calls
+        <code>sampling/createMessage</code>, and
+        <code>anna.agent.session({ submode: "auto" })</code>.
       </p>
     </header>
 
     <section>
       <h2>1. One-shot completion</h2>
+      <div class="mode-row">
+        <label for="llm-mode">LLM source:</label>
+        <select id="llm-mode">
+          <option value="direct" selected>Direct — anna.llm.complete</option>
+          <option value="executa">Via Executa — anna.tools.invoke → sampling/createMessage</option>
+        </select>
+      </div>
+      <p class="muted mode-hint" id="mode-hint">
+        Calls the host LLM directly from the iframe.
+      </p>
       <textarea id="complete-input" rows="2">Say hello in three short sentences.</textarea>
-      <button id="complete-btn">Run llm.complete</button>
+      <button id="complete-btn">Run completion</button>
       <pre id="complete-out" class="out">(no output yet)</pre>
     </section>
 
