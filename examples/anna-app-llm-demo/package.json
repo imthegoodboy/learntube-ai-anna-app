@@ -10,6 +10,6 @@
     "validate": "anna-app validate"
   },
   "devDependencies": {
-    "@anna-ai/cli": "latest"
+    "@anna-ai/cli": "^0.1.22"
   }
 }

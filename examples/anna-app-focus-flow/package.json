@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@anna-ai/cli": "latest",
+    "@anna-ai/cli": "^0.1.22",
     "vitest": "^2.1.0"
   }
 }
