@@ -12,7 +12,9 @@
       <p class="muted">
         Exercises <code>anna.llm.complete</code> (direct),
         <code>anna.tools.invoke</code> against an Executa that calls
-        <code>sampling/createMessage</code>, and the full
+        <code>sampling/createMessage</code> (single-shot <em>and</em> an N-step
+        <code>sample_chain</code> that exercises <code>max_calls</code> +
+        sampling-token renewal), and the full
         <code>agent.session</code> surface
         (create/run/cancel/history/refresh/delete/list)
         over <strong>both</strong> the HOST API and the Reverse RPC transports,
@@ -39,6 +41,31 @@
     </section>
 
     <section>
+      <h2>1b. Sample chain (long invoke · token renewal)</h2>
+      <p class="muted">
+        Invokes the Executa's <code>sample_chain</code> tool, which fires
+        <strong>N sequential</strong> <code>sampling/createMessage</code> calls
+        inside a <em>single</em> invoke. This exercises the host's
+        <code>max_calls</code> quota and — with enough steps/delay to outlast the
+        10-minute sampling-token TTL — the <strong>token-renewal</strong> path
+        (forum <code>/t/83</code> "Signature has expired"). Requires the
+        <code>--real</code> LLM bridge; mock fixtures do not serve reverse
+        sampling.
+      </p>
+      <div class="mode-row">
+        <label for="chain-steps">Steps:</label>
+        <input id="chain-steps" type="number" min="1" max="8" value="3" class="num-input" />
+        <label for="chain-delay">Delay between steps (s):</label>
+        <input id="chain-delay" type="number" min="0" step="0.5" value="0" class="num-input" />
+        <label for="chain-maxtokens">Max tokens/step:</label>
+        <input id="chain-maxtokens" type="number" min="1" value="128" class="num-input" />
+      </div>
+      <textarea id="chain-input" rows="2">Tell me one surprising fact, then keep building on it.</textarea>
+      <button id="chain-btn">Run sample chain</button>
+      <pre id="chain-out" class="out">(no output yet)</pre>
+    </section>
+
+    <section>
       <h2>2. Agent session (all methods)</h2>
       <div class="mode-row">
         <label for="session-transport">Transport:</label>
@@ -49,6 +76,17 @@
       </div>
       <p class="muted mode-hint" id="transport-hint">
         Calls the host session API directly from the iframe.
+      </p>
+      <label for="session-system-prompt">Session system prompt (optional):</label>
+      <textarea
+        id="session-system-prompt"
+        rows="2"
+        placeholder="e.g. You are a terse math tutor. Answer with the number only."
+      ></textarea>
+      <p class="muted">
+        Applied at create time to every run in this session. A per-run
+        systemPrompt (if passed to run) still wins; the platform safety floor
+        always applies on top.
       </p>
       <div class="btn-row">
         <button id="session-create-btn">create</button>

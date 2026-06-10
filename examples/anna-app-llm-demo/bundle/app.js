@@ -151,6 +151,35 @@ $("complete-btn").addEventListener("click", async () => {
 });
 
 // ──────────────────────────────────────────────────────────
+// 1b. sample_chain — N sequential sampling/createMessage calls in ONE
+//     invoke. Exercises the host max_calls quota and the sampling-token
+//     renewal path (forum /t/83): a long enough chain outlives the 10-min
+//     token TTL, and the host transparently renews + retries mid-invoke.
+
+const chainOut = $("chain-out");
+
+$("chain-btn").addEventListener("click", async () => {
+  clearError();
+  const anna = await annaReady;
+  const steps = Math.max(1, Number($("chain-steps").value) || 3);
+  const delay_s = Math.max(0, Number($("chain-delay").value) || 0);
+  const max_tokens = Math.max(1, Number($("chain-maxtokens").value) || 128);
+  const prompt = $("chain-input").value || "hi";
+  chainOut.textContent = `(running sample_chain: ${steps} step(s)…)`;
+  try {
+    const reply = await anna.tools.invoke({
+      tool_id: EXECUTA_TOOL_ID,
+      method: "sample_chain",
+      args: { prompt, steps, delay_s, max_tokens },
+    });
+    chainOut.textContent = JSON.stringify(reply, null, 2);
+  } catch (err) {
+    chainOut.textContent = "(failed)";
+    showError("tools.invoke(sample_chain)", err);
+  }
+});
+
+// ──────────────────────────────────────────────────────────
 // 2. agent.session — full method coverage over two transports.
 //
 //    HOST API   : anna.agent.session({...}) → AgentSession handle, plus
@@ -248,15 +277,16 @@ $("session-create-btn").addEventListener("click", async () => {
   clearError();
   try {
     const anna = await annaReady;
+    const systemPrompt = ($("session-system-prompt").value || "").trim() || undefined;
     let uuid;
     if (transport() === "host") {
-      sess.handle = await anna.agent.session({ submode: "auto" });
+      sess.handle = await anna.agent.session({ submode: "auto", system_prompt: systemPrompt });
       uuid = sess.handle.app_session_uuid || null;
       // The handle carries lifecycle metadata (expires_at / max_lifetime_at /
       // idle_ttl_seconds) straight off the create response.
       renderLifecycle(sess.handle);
     } else {
-      const r = await executaSession("create", { submode: "auto" });
+      const r = await executaSession("create", { submode: "auto", system_prompt: systemPrompt });
       sess.handle = null;
       uuid = r.app_session_uuid || null;
       renderLifecycle(r);

@@ -57,6 +57,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   align-items: center;
   gap: 0.5rem;
   margin: 0.4rem 0 0.2rem;
+  flex-wrap: wrap;
 }
 .mode-row label { font-size: 0.9rem; color: #666; }
 .mode-row select {
@@ -67,6 +68,15 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: transparent;
   flex: 1;
   min-width: 0;
+}
+.num-input {
+  font: inherit;
+  width: 5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #8884;
+  background: transparent;
+  box-sizing: border-box;
 }
 .mode-hint { margin: 0.1rem 0 0.4rem; font-size: 0.8rem; }
 

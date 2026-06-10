@@ -9,6 +9,10 @@ to reach an LLM:
   bundled Executa (`executas/llm-via-executa-python/`) which in turn
   issues a reverse `sampling/createMessage` to the host. This lets you
   observe / shape the prompt server-side before it reaches the model.
+  The Executa also exposes `method: "sample_chain"` — N sequential
+  sampling calls in a single invoke — to exercise the host's
+  `max_calls` quota **and** the sampling-token renewal that keeps a
+  long-running invoke alive past the token's 10-minute TTL.
 
 and the **full `agent.session` surface** — create / run / cancel /
 history / **refresh** / delete / **list** — over **two switchable
@@ -112,6 +116,40 @@ fresh session after toggling.
 > **real** mode it returns this run's live sessions.
 
 ---
+
+## Session system prompt (set once, applies to every run)
+
+The **Session system prompt** box (above the **create** button) is sent
+as `system_prompt` at **create** time and is persisted with the session.
+Every subsequent `run` in that session inherits it — you set the agent's
+identity / persona / tone / output format **once** instead of repeating
+it on each turn:
+
+```js
+// HOST API transport
+const s = await anna.agent.session({
+  submode: "auto",
+  system_prompt: "You are a terse math tutor. Answer with the number only.",
+});
+for await (const ev of s.run({ content: "What is 12 × 13?" })) { /* 156 */ }
+```
+
+Precedence, highest to lowest:
+
+1. **per-run `systemPrompt`** — pass it to `run({ content, systemPrompt })`
+   to override the session prompt for a single turn.
+2. **session `system_prompt`** — the value set here at create time.
+3. host default persona — used when neither is supplied.
+
+The platform **safety floor is always prepended and cannot be
+overridden** by either value. The prompt is capped at **4000 characters**
+and is treated as untrusted input (a few control tokens are rejected at
+create time). Leaving the box empty creates a session with no custom
+prompt, exactly as before. The Reverse RPC transport threads the same
+value through `agent_session(op: "create", system_prompt: …)`.
+
+---
+
 
 ## Session lifecycle (sliding idle window)
 
