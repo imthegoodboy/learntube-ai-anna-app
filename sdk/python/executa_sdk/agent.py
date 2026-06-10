@@ -91,6 +91,7 @@ class AgentSession:
     fixed_client_id: Optional[str]
     granted_tools: List[str]
     thread_id: Optional[str] = None
+    system_prompt: Optional[str] = None
     _client: "AgentSessionClient" = None  # type: ignore[assignment]
 
     async def run(
@@ -100,6 +101,7 @@ class AgentSession:
         attachments: Optional[List[dict]] = None,
         recursion_limit: int = 8,
         run_id: Optional[str] = None,
+        system_prompt: Optional[str] = None,
         timeout: float = 300.0,
     ) -> AsyncIterator[dict]:
         """Run one agent turn and yield each SSE frame from the host.
@@ -109,18 +111,25 @@ class AgentSession:
         run completes. We yield each frame in order so callers can write
         the same ``async for frame in session.run(...)`` code that an
         anna-app's ``llm.runAgent()`` uses.
+
+        ``system_prompt`` (optional) overrides the session-level system
+        prompt for **this turn only**; it does not change the stored
+        session value. Subject to the platform safety floor.
         """
         if self._client is None:
             raise RuntimeError("AgentSession was not created via AgentSessionClient")
+        body = {
+            "app_session_uuid": self.uuid,
+            "content": content,
+            "attachments": attachments,
+            "recursion_limit": recursion_limit,
+            "run_id": run_id,
+        }
+        if system_prompt is not None:
+            body["systemPrompt"] = system_prompt
         result = await self._client._call(
             METHOD_AGENT_SESSION_RUN,
-            {
-                "app_session_uuid": self.uuid,
-                "content": content,
-                "attachments": attachments,
-                "recursion_limit": recursion_limit,
-                "run_id": run_id,
-            },
+            body,
             timeout=timeout,
         )
         for frame in result.get("frames") or []:
@@ -278,6 +287,7 @@ class AgentSessionClient:
         fixed_client_id: Optional[str] = None,
         label: Optional[str] = None,
         quota_caps: Optional[dict] = None,
+        system_prompt: Optional[str] = None,
         ttl_seconds: int = 600,
         timeout: float = 30.0,
     ) -> AgentSession:
@@ -287,6 +297,10 @@ class AgentSessionClient:
         - ``agent_submode="auto"`` lets the host's auto-router pick a
           tool from the user's grant; ``"fixed"`` requires
           ``fixed_client_id``.
+        - ``system_prompt`` (optional) sets a session-level system prompt
+          applied to every ``run()``. The app fully controls identity /
+          persona / tone; the platform only enforces a minimal,
+          non-overridable safety floor. ≤ 4000 chars.
         """
         result = await self._call(
             METHOD_AGENT_SESSION_CREATE,
@@ -296,6 +310,7 @@ class AgentSessionClient:
                 "fixed_client_id": fixed_client_id,
                 "label": label,
                 "quota_caps": quota_caps,
+                "system_prompt": system_prompt,
                 "ttl_seconds": ttl_seconds,
             },
             timeout=timeout,
@@ -308,6 +323,7 @@ class AgentSessionClient:
             fixed_client_id=result.get("fixed_client_id"),
             granted_tools=list(result.get("granted_tools") or []),
             thread_id=result.get("thread_id"),
+            system_prompt=result.get("system_prompt"),
         )
         sess._client = self
         return sess

@@ -79,7 +79,10 @@ MANIFEST = {
             "name": "complete",
             "description": (
                 "Run a single-turn LLM completion. The host picks the "
-                "model and bills the user's quota."
+                "model and bills the user's quota. Exposes the full "
+                "sampling/createMessage attribute surface (temperature, "
+                "stop sequences, model preferences) so you can see how each "
+                "maps onto the host LLM call."
             ),
             "parameters": [
                 {
@@ -101,6 +104,146 @@ MANIFEST = {
                     "description": "Max output tokens (16-4096).",
                     "required": False,
                     "default": 256,
+                },
+                {
+                    "name": "temperature",
+                    "type": "number",
+                    "description": (
+                        "Sampling temperature 0.0-2.0. Omitted → host uses "
+                        "0.7 (it does NOT defer to the provider default)."
+                    ),
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "stop",
+                    "type": "array",
+                    "items_type": "string",
+                    "description": "Optional stop sequences.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "model_hint",
+                    "type": "string",
+                    "description": (
+                        "Preferred model name hint (MCP modelPreferences "
+                        "hint), e.g. 'gpt-4o'. Host may substitute an "
+                        "equivalent; omit to use the user's saved model."
+                    ),
+                    "required": False,
+                    "default": "",
+                },
+                {
+                    "name": "cost_priority",
+                    "type": "number",
+                    "description": "modelPreferences.costPriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "speed_priority",
+                    "type": "number",
+                    "description": "modelPreferences.speedPriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "intelligence_priority",
+                    "type": "number",
+                    "description": "modelPreferences.intelligencePriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
+                },
+            ],
+        },
+        {
+            "name": "sample_chain",
+            "description": (
+                "Run N sequential sampling/createMessage calls inside a "
+                "SINGLE tool invoke, each step feeding the previous answer "
+                "back as context. Demonstrates multi-call sampling within "
+                "one invoke: it exercises the per-invoke max_calls / "
+                "max_tokens quota AND the host's automatic sampling-token "
+                "renewal — a long chain outlives the short-lived token, so "
+                "later steps transparently run on a renewed token instead "
+                "of failing with 'Signature has expired'. Use 'delay_s' to "
+                "stretch the invoke across the token TTL when reproducing "
+                "the original instability."
+            ),
+            "parameters": [
+                {
+                    "name": "prompt",
+                    "type": "string",
+                    "description": "Seed prompt for step 1.",
+                    "required": True,
+                },
+                {
+                    "name": "steps",
+                    "type": "integer",
+                    "description": "Number of sequential sampling calls (1-8).",
+                    "required": False,
+                    "default": 3,
+                },
+                {
+                    "name": "system_prompt",
+                    "type": "string",
+                    "description": "Optional system instruction applied to every step.",
+                    "required": False,
+                    "default": "",
+                },
+                {
+                    "name": "max_tokens",
+                    "type": "integer",
+                    "description": "Per-step max output tokens (16-4096).",
+                    "required": False,
+                    "default": 128,
+                },
+                {
+                    "name": "temperature",
+                    "type": "number",
+                    "description": "Sampling temperature 0.0-2.0 for every step.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "delay_s",
+                    "type": "number",
+                    "description": (
+                        "Seconds to sleep between steps. Use a large value "
+                        "(e.g. > token TTL / steps) to force the invoke to "
+                        "outlive the sampling token and exercise renewal."
+                    ),
+                    "required": False,
+                    "default": 0,
+                },
+                {
+                    "name": "model_hint",
+                    "type": "string",
+                    "description": "Preferred model name hint for every step.",
+                    "required": False,
+                    "default": "",
+                },
+                {
+                    "name": "cost_priority",
+                    "type": "number",
+                    "description": "modelPreferences.costPriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "speed_priority",
+                    "type": "number",
+                    "description": "modelPreferences.speedPriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
+                },
+                {
+                    "name": "intelligence_priority",
+                    "type": "number",
+                    "description": "modelPreferences.intelligencePriority 0.0-1.0.",
+                    "required": False,
+                    "default": None,
                 },
             ],
         },
@@ -154,6 +297,18 @@ MANIFEST = {
                     "default": "auto",
                 },
                 {
+                    "name": "system_prompt",
+                    "type": "string",
+                    "description": (
+                        "Optional session-level system prompt for op=create. "
+                        "Applies to every run in the session unless a per-run "
+                        "systemPrompt overrides it; the platform safety floor "
+                        "is always enforced on top."
+                    ),
+                    "required": False,
+                    "default": "",
+                },
+                {
                     "name": "run_id",
                     "type": "string",
                     "description": "Run id to cancel for op=cancel.",
@@ -202,11 +357,61 @@ agent_client = AgentSessionClient(write_frame=_write_frame)
 # ─── Tool implementation ─────────────────────────────────────────────
 
 
-async def _complete(prompt: str, system_prompt: str = "", max_tokens: int = 256, *, invoke_id: str) -> dict:
+def _build_model_preferences(
+    *,
+    model_hint: str = "",
+    cost_priority: float | None = None,
+    speed_priority: float | None = None,
+    intelligence_priority: float | None = None,
+) -> dict | None:
+    """Assemble an MCP-style ``modelPreferences`` dict from flat tool args.
+
+    Returns ``None`` when nothing was specified so the host falls back to
+    the user's saved ``preferred_model``.
+    """
+    prefs: dict = {}
+    if model_hint and model_hint.strip():
+        prefs["hints"] = [{"name": model_hint.strip()}]
+    for key, val in (
+        ("costPriority", cost_priority),
+        ("speedPriority", speed_priority),
+        ("intelligencePriority", intelligence_priority),
+    ):
+        if val is not None:
+            prefs[key] = max(0.0, min(1.0, float(val)))
+    return prefs or None
+
+
+def _extract_text(result: dict) -> str:
+    content = result.get("content") or {}
+    if isinstance(content, dict) and content.get("type") == "text":
+        return content.get("text", "")
+    return ""
+
+
+async def _complete(
+    prompt: str,
+    system_prompt: str = "",
+    max_tokens: int = 256,
+    temperature: float | None = None,
+    stop: list[str] | None = None,
+    model_hint: str = "",
+    cost_priority: float | None = None,
+    speed_priority: float | None = None,
+    intelligence_priority: float | None = None,
+    *,
+    invoke_id: str,
+) -> dict:
     if not prompt or not prompt.strip():
         return {"text": "", "note": "empty prompt"}
 
     max_tokens = max(16, min(4096, int(max_tokens)))
+    model_preferences = _build_model_preferences(
+        model_hint=model_hint,
+        cost_priority=cost_priority,
+        speed_priority=speed_priority,
+        intelligence_priority=intelligence_priority,
+    )
 
     result = await sampling.create_message(
         messages=[
@@ -217,19 +422,122 @@ async def _complete(prompt: str, system_prompt: str = "", max_tokens: int = 256,
         ],
         max_tokens=max_tokens,
         system_prompt=system_prompt or None,
+        temperature=temperature,
+        stop_sequences=list(stop) if stop else None,
+        model_preferences=model_preferences,
         metadata={"executa_invoke_id": invoke_id, "tool": "complete"},
         timeout=60.0,
     )
 
-    text_out = ""
-    content = result.get("content") or {}
-    if isinstance(content, dict) and content.get("type") == "text":
-        text_out = content.get("text", "")
     return {
-        "text": text_out,
+        "text": _extract_text(result),
         "model": result.get("model"),
         "usage": result.get("usage"),
         "stopReason": result.get("stopReason"),
+        "modelPreferences": model_preferences,
+    }
+
+
+async def _sample_chain(
+    prompt: str,
+    steps: int = 3,
+    system_prompt: str = "",
+    max_tokens: int = 128,
+    temperature: float | None = None,
+    delay_s: float = 0,
+    model_hint: str = "",
+    cost_priority: float | None = None,
+    speed_priority: float | None = None,
+    intelligence_priority: float | None = None,
+    *,
+    invoke_id: str,
+) -> dict:
+    """Run ``steps`` sequential sampling calls inside ONE invoke.
+
+    Each step asks the LLM to build on the previous answer, so the chain
+    issues multiple ``sampling/createMessage`` reverse-RPCs under a single
+    ``invoke_id``. This is the scenario that previously broke once the
+    cumulative wall-clock crossed the sampling-token TTL: the host now
+    renews the token transparently between calls (see
+    matrix/src/executa/sampling.py), so every step succeeds. ``delay_s``
+    lets you stretch the chain past the TTL to prove renewal works.
+    """
+    if not prompt or not prompt.strip():
+        return {"text": "", "note": "empty prompt", "steps": []}
+
+    steps = max(1, min(8, int(steps)))
+    max_tokens = max(16, min(4096, int(max_tokens)))
+    delay_s = max(0.0, float(delay_s))
+    model_preferences = _build_model_preferences(
+        model_hint=model_hint,
+        cost_priority=cost_priority,
+        speed_priority=speed_priority,
+        intelligence_priority=intelligence_priority,
+    )
+
+    step_results: list[dict] = []
+    models_used: list[str] = []
+    prompt_tokens = completion_tokens = total_tokens = 0
+    current = prompt.strip()
+
+    for i in range(steps):
+        if i > 0 and delay_s > 0:
+            await asyncio.sleep(delay_s)
+
+        turn_prompt = (
+            current
+            if i == 0
+            else f"Continue and refine the following, adding one new idea:\n\n{current}"
+        )
+        result = await sampling.create_message(
+            messages=[
+                {
+                    "role": "user",
+                    "content": {"type": "text", "text": turn_prompt},
+                }
+            ],
+            max_tokens=max_tokens,
+            system_prompt=system_prompt or None,
+            temperature=temperature,
+            model_preferences=model_preferences,
+            metadata={
+                "executa_invoke_id": invoke_id,
+                "tool": "sample_chain",
+                "step": i + 1,
+            },
+            timeout=90.0,
+        )
+        text_out = _extract_text(result)
+        usage = result.get("usage") or {}
+        prompt_tokens += int(usage.get("inputTokens") or 0)
+        completion_tokens += int(usage.get("outputTokens") or 0)
+        total_tokens += int(usage.get("totalTokens") or 0)
+        model = result.get("model")
+        if model:
+            models_used.append(model)
+        step_results.append(
+            {
+                "step": i + 1,
+                "text": text_out,
+                "model": model,
+                "usage": usage,
+                "stopReason": result.get("stopReason"),
+            }
+        )
+        if text_out:
+            current = text_out
+
+    return {
+        "text": current,
+        "steps": step_results,
+        "stepCount": len(step_results),
+        "modelsUsed": models_used,
+        "totalUsage": {
+            "inputTokens": prompt_tokens,
+            "outputTokens": completion_tokens,
+            "totalTokens": total_tokens,
+        },
+        "modelPreferences": model_preferences,
     }
 
 
@@ -239,6 +547,7 @@ async def _agent_session(
     app_session_uuid: str = "",
     prompt: str = "",
     submode: str = "auto",
+    system_prompt: str = "",
     run_id: str = "",
     include_expired: bool = False,
     limit: int = 50,
@@ -257,6 +566,7 @@ async def _agent_session(
         sess = await agent_client.create(
             agent_submode=submode or "auto",
             label="llm-demo (reverse-rpc)",
+            system_prompt=(system_prompt or "").strip() or None,
         )
         return {
             "op": op,
@@ -383,6 +693,8 @@ def _handle_invoke(req_id, params: dict) -> dict:
 
     if tool == "complete":
         coro = _complete(invoke_id=invoke_id, **args)
+    elif tool == "sample_chain":
+        coro = _sample_chain(invoke_id=invoke_id, **args)
     elif tool == "agent_session":
         coro = _agent_session(invoke_id=invoke_id, **args)
     else:
