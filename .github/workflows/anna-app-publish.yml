@@ -46,6 +46,7 @@ on:
         options:
           - all
           - anna-app-aps-files-demo
+          - anna-app-file-upload-demo
           - anna-app-embed-demo
           - anna-app-llm-demo
           - anna-app-focus-flow
