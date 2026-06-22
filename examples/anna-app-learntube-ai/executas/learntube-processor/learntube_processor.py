@@ -30,6 +30,7 @@ DEFAULT_TIMEOUT = 8
 
 
 MANIFEST: dict[str, Any] = {
+    "name": "tool-test-learntube-processor-12345678",
     "display_name": "LearnTube Processor",
     "version": "0.1.0",
     "description": "Extracts YouTube lesson metadata/transcripts and creates study artifacts.",
