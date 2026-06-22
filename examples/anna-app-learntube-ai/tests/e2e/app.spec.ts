@@ -35,7 +35,9 @@ test("creates a learning workspace and supports core study actions", async ({ pa
   await expect(app.getByText(/XP/)).toBeVisible();
 
   await nav.getByRole("button", { name: "Roadmap" }).click();
+  await expect(app.getByRole("button", { name: "Locked" }).first()).toBeDisabled();
   await app.getByRole("button", { name: "Mark done" }).first().click();
+  await expect(app.locator(".roadmap-node[data-status='done']").filter({ hasText: "Binary Search" })).toBeVisible();
   await expect(app.getByText(/roadmap done/i)).toBeVisible();
 
   await nav.getByRole("button", { name: "Mentor" }).click();

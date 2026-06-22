@@ -38,7 +38,7 @@
         "title": "LearnTube AI",
         "default": true,
         "entry": "index.html",
-        "min_size": { "w": 420, "h": 620 },
+        "min_size": { "w": 360, "h": 620 },
         "default_size": { "w": 1180, "h": 820 },
         "max_size": { "w": 1680, "h": 1200 },
         "resizable": true,

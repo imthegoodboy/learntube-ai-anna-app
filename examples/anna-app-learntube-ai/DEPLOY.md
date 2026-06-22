@@ -13,14 +13,14 @@ npm run validate
 npm run test:e2e
 
 anna-app apps push --account $ANNA_HOST --json
-anna-app apps cut 0.1.0 --account $ANNA_HOST --json
+anna-app apps cut 0.1.2 --account $ANNA_HOST --json
 anna-app apps status learntube-ai --account $ANNA_HOST --json
 ```
 
 Release only after review/approval:
 
 ```powershell
-anna-app apps release 0.1.0 --account $ANNA_HOST --json
+anna-app apps release 0.1.2 --account $ANNA_HOST --json
 ```
 
 ## GitHub Publishing
@@ -40,13 +40,21 @@ git commit -m "add learntube ai anna app"
 git push -u origin codex/learntube-ai
 ```
 
-## Binary Executa Gap
+## Production Executa Binaries
 
-The current app uses local Executa distribution for development. Before a broad public release, create platform binaries and update:
+The source app keeps the bundled Executa in local mode for development. For broad production distribution, use the root GitHub workflow:
+
+```powershell
+gh workflow run anna-app-publish.yml -f app=anna-app-learntube-ai -f lifecycle=cut -f dry_run=false
+```
+
+That workflow builds macOS, Linux, and Windows binaries, rewrites:
 
 ```text
 executas/learntube-processor/executa.json
   distribution.profiles.binary.binary_urls
 ```
 
-Without binary URLs, users need a compatible Python/uv local environment to run the bundled processor.
+and switches the published snapshot to binary mode before `apps push` / `apps cut`.
+
+Use the local `anna-app apps push/cut` commands only for development or review when you intentionally want local Executa distribution.

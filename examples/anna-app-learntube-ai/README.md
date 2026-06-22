@@ -28,7 +28,7 @@ The bundled `learntube-processor` Executa is deterministic and requires no provi
 1. Parses YouTube video IDs.
 2. Attempts public title and caption extraction.
 3. Prefers pasted transcript text when supplied.
-4. Generates a complete workspace even when captions are unavailable.
+4. Generates a complete workspace from transcript evidence when captions are unavailable.
 
 The direct Anna LLM path is optional. If it is not granted or fails, the app remains usable.
 
@@ -71,4 +71,4 @@ LearnTube AI stores compact study history and progress in Anna storage. Runtime 
 
 ## Production Notes
 
-For review-ready distribution, publish the bundled Executa as a binary and fill `executas/learntube-processor/executa.json` `binary_urls` for the supported platforms. Local distribution is appropriate for development and review harness testing.
+For review-ready distribution, run the root `anna-app-publish.yml` workflow for `anna-app-learntube-ai`. It builds macOS, Linux, and Windows Executa archives, pins `distribution.profiles.binary.binary_urls`, and cuts the app with binary distribution. Local distribution remains appropriate for development and harness testing.

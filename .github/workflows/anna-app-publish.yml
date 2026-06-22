@@ -169,9 +169,10 @@ jobs:
           # macOS x86_64 builds on an Apple Silicon runner via Rosetta 2
           # (x64 Python) — GitHub is retiring the Intel `macos-13` runner,
           # which leaves jobs queued forever waiting for a runner.
-          - { os: macos-14, name: darwin-arm64, python_arch: "" }
-          - { os: macos-15, name: darwin-x86_64, python_arch: x64 }
-          - { os: ubuntu-latest, name: linux-x86_64, python_arch: "" }
+          - { os: macos-14, name: darwin-arm64, python_arch: "", exe_suffix: "", asset_ext: "tar.gz" }
+          - { os: macos-15, name: darwin-x86_64, python_arch: x64, exe_suffix: "", asset_ext: "tar.gz" }
+          - { os: ubuntu-latest, name: linux-x86_64, python_arch: "", exe_suffix: "", asset_ext: "tar.gz" }
+          - { os: windows-latest, name: windows-x86_64, python_arch: x64, exe_suffix: ".exe", asset_ext: "zip" }
     runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
@@ -181,6 +182,7 @@ jobs:
           architecture: ${{ matrix.platform.python_arch || '' }}
 
       - name: Install build deps + in-repo SDK
+        shell: bash
         run: |
           python -m pip install --upgrade pip pyinstaller
           # The plugins import `executa_sdk`; install the in-repo SDK so
@@ -195,16 +197,20 @@ jobs:
         env:
           TOOL_ID: ${{ matrix.app.tool_id }}
           ENTRY: ${{ matrix.app.entry }}
+          EXE_SUFFIX: ${{ matrix.platform.exe_suffix }}
+        shell: bash
         run: |
           pyinstaller --onefile --clean --noupx --name "$TOOL_ID" "$ENTRY"
-          test -f "dist/$TOOL_ID"
+          test -f "dist/$TOOL_ID$EXE_SUFFIX"
 
       - name: Smoke test (describe)
         working-directory: examples/${{ matrix.app.app_dir }}/executas/${{ matrix.app.executa_dir }}
         env:
           TOOL_ID: ${{ matrix.app.tool_id }}
+          EXE_SUFFIX: ${{ matrix.platform.exe_suffix }}
+        shell: bash
         run: |
-          out="$(printf '%s\n' '{"jsonrpc":"2.0","method":"describe","id":1}' | "./dist/$TOOL_ID" 2>/dev/null || true)"
+          out="$(printf '%s\n' '{"jsonrpc":"2.0","method":"describe","id":1}' | "./dist/$TOOL_ID$EXE_SUFFIX" 2>/dev/null || true)"
           echo "describe → $out"
           if printf '%s' "$out" | python3 -c "import sys,json,os; d=json.load(sys.stdin); assert d['result']['name']==os.environ['TOOL_ID']" 2>/dev/null; then
             echo "✅ protocol smoke test passed"
@@ -217,10 +223,52 @@ jobs:
         env:
           TOOL_ID: ${{ matrix.app.tool_id }}
           PLATFORM: ${{ matrix.platform.name }}
+          EXE_SUFFIX: ${{ matrix.platform.exe_suffix }}
+          ASSET_EXT: ${{ matrix.platform.asset_ext }}
+          VERSION: ${{ matrix.app.version }}
+        shell: bash
         run: |
-          asset="$TOOL_ID-$PLATFORM.tar.gz"
-          tar czf "$asset" "$TOOL_ID"
-          shasum -a 256 "$asset" > "$asset.sha256"
+          asset="$TOOL_ID-$PLATFORM.$ASSET_EXT"
+          python - <<'PY'
+          import hashlib, json, os, shutil, tarfile, zipfile
+          from pathlib import Path
+
+          tool_id = os.environ["TOOL_ID"]
+          platform = os.environ["PLATFORM"]
+          exe_suffix = os.environ["EXE_SUFFIX"]
+          asset_ext = os.environ["ASSET_EXT"]
+          version = os.environ["VERSION"]
+          asset = f"{tool_id}-{platform}.{asset_ext}"
+          source = Path(f"{tool_id}{exe_suffix}")
+          package = Path("package")
+          if package.exists():
+              shutil.rmtree(package)
+          bin_dir = package / "bin"
+          bin_dir.mkdir(parents=True)
+          binary_name = f"{tool_id}{exe_suffix}"
+          shutil.copy2(source, bin_dir / binary_name)
+          manifest = {
+              "name": tool_id,
+              "version": version,
+              "runtime": {
+                  "binary": {
+                      "entrypoint": {"default": f"bin/{binary_name}"},
+                      "permissions": {f"bin/{binary_name}": "0o755"},
+                  }
+              },
+          }
+          (package / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          if asset_ext == "zip":
+              with zipfile.ZipFile(asset, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                  for path in package.rglob("*"):
+                      zf.write(path, path.relative_to(package))
+          else:
+              with tarfile.open(asset, "w:gz") as tf:
+                  for path in package.rglob("*"):
+                      tf.add(path, path.relative_to(package))
+          digest = hashlib.sha256(Path(asset).read_bytes()).hexdigest()
+          Path(f"{asset}.sha256").write_text(f"{digest}  {asset}\n", encoding="utf-8")
+          PY
           echo "ASSET_DIR=examples/${{ matrix.app.app_dir }}/executas/${{ matrix.app.executa_dir }}/dist" >> "$GITHUB_ENV"
           echo "ASSET=$asset" >> "$GITHUB_ENV"
 
@@ -275,10 +323,22 @@ jobs:
           from pathlib import Path
           repo, tag, ej = os.environ["REPO"], os.environ["TAG"], os.environ["EJ"]
           p = Path(ej); m = json.loads(p.read_text("utf-8"))
-          bu = m.get("distribution", {}).get("binary_urls", {})
-          for asset in bu.values():
-              fname = asset["url"].rsplit("/", 1)[-1]
+          dist = m.setdefault("distribution", {})
+          dist["active"] = "binary"
+          profiles = dist.setdefault("profiles", {})
+          binary = profiles.setdefault("binary", {})
+          package_name = binary.get("package_name") or m.get("tool_id") or m.get("slug")
+          binary.setdefault("package_name", package_name)
+          binary.setdefault("executable_name", package_name)
+          binary.setdefault("supports_protocol", True)
+          bu = binary.setdefault("binary_urls", {})
+          for platform, asset in bu.items():
+              fmt = asset.get("format") or ("zip" if platform.startswith("windows") else "tar.gz")
+              suffix = ".exe" if platform.startswith("windows") else ""
+              fname = f"{package_name}-{platform}.{fmt}"
               asset["url"] = f"https://github.com/{repo}/releases/download/{tag}/{fname}"
+              asset["entrypoint"] = f"bin/{package_name}{suffix}"
+              asset["format"] = fmt
           p.write_text(json.dumps(m, indent=2) + "\n", "utf-8")
           print(f"pinned {ej} → https://github.com/{repo}/releases/download/{tag}/")
           PY

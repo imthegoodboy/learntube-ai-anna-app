@@ -22,22 +22,27 @@
         "binary_urls": {
           "darwin-arm64": {
             "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-darwin-arm64.tar.gz",
-            "entrypoint": "tool-test-learntube-processor-12345678",
+            "entrypoint": "bin/tool-test-learntube-processor-12345678",
             "format": "tar.gz"
           },
           "darwin-x86_64": {
             "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-darwin-x86_64.tar.gz",
-            "entrypoint": "tool-test-learntube-processor-12345678",
+            "entrypoint": "bin/tool-test-learntube-processor-12345678",
             "format": "tar.gz"
           },
           "linux-x86_64": {
             "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-linux-x86_64.tar.gz",
-            "entrypoint": "tool-test-learntube-processor-12345678",
+            "entrypoint": "bin/tool-test-learntube-processor-12345678",
             "format": "tar.gz"
+          },
+          "windows-x86_64": {
+            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-windows-x86_64.zip",
+            "entrypoint": "bin/tool-test-learntube-processor-12345678.exe",
+            "format": "zip"
           }
         }
       }
     }
   },
-  "_comment": "Local distribution is used for development. The binary profile is populated for publish; .github/workflows/anna-app-publish.yml builds release assets and rewrites these URLs to the publishing repository before push or cut."
+  "_comment": "Local distribution is used for development. The publish workflow builds release assets, rewrites distribution.profiles.binary.binary_urls, and switches the published snapshot to binary before push or cut."
 }

@@ -1,31 +1,33 @@
-/* Hallmark | tokens | genre: modern-minimal | theme: Quiet/Mineral | anchor hue: olive */
+/* Hallmark | tokens | genre: modern-minimal | theme: Quiet/Signal | anchor hue: emerald */
 :root {
-  --font-display: Cambria, Georgia, "Times New Roman", serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-body: Aptos, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-outlier: "Cascadia Mono", "SFMono-Regular", ui-monospace, monospace;
 
-  --color-paper: oklch(97% 0.012 92);
-  --color-paper-2: oklch(94% 0.018 96);
-  --color-paper-3: oklch(90% 0.024 100);
-  --color-paper-4: oklch(84% 0.03 102);
-  --color-ink: oklch(20% 0.035 96);
-  --color-ink-2: oklch(32% 0.035 98);
-  --color-muted: oklch(43% 0.03 100);
-  --color-neutral: oklch(55% 0.025 98);
-  --color-rule: oklch(82% 0.027 98);
-  --color-rule-2: oklch(72% 0.032 100);
-  --color-accent: oklch(36% 0.09 146);
-  --color-accent-2: oklch(58% 0.11 68);
-  --color-accent-soft: oklch(90% 0.055 145);
-  --color-accent-ink: oklch(97% 0.012 92);
-  --color-focus: oklch(37% 0.12 162);
+  --color-paper: oklch(98.6% 0.004 248);
+  --color-paper-2: oklch(95.8% 0.008 248);
+  --color-paper-3: oklch(91.8% 0.012 248);
+  --color-paper-4: oklch(85.5% 0.016 248);
+  --color-ink: oklch(20% 0.026 250);
+  --color-ink-2: oklch(34% 0.028 250);
+  --color-muted: oklch(48% 0.022 250);
+  --color-neutral: oklch(60% 0.018 250);
+  --color-rule: oklch(86% 0.012 248);
+  --color-rule-2: oklch(76% 0.016 248);
+  --color-accent: oklch(42% 0.105 166);
+  --color-accent-2: oklch(62% 0.13 78);
+  --color-accent-soft: oklch(92% 0.046 166);
+  --color-accent-ink: oklch(98.5% 0.004 248);
+  --color-focus: oklch(48% 0.14 190);
   --color-danger: oklch(50% 0.15 28);
   --color-danger-soft: oklch(92% 0.045 28);
   --color-success: oklch(43% 0.11 145);
   --color-success-soft: oklch(91% 0.052 145);
   --color-info: oklch(41% 0.095 232);
   --color-info-soft: oklch(91% 0.045 232);
-  --color-shadow: oklch(28% 0.035 96 / 0.08);
+  --color-warning: oklch(56% 0.13 68);
+  --color-warning-soft: oklch(93% 0.06 76);
+  --color-shadow: oklch(22% 0.03 250 / 0.08);
 
   --space-3xs: 0.125rem;
   --space-2xs: 0.25rem;
@@ -45,8 +47,8 @@
   --text-xl: 1.953rem;
   --text-2xl: 2.441rem;
   --text-3xl: 3.052rem;
-  --text-display-s: clamp(2.5rem, 4vw + 1rem, 5rem);
-  --text-display: clamp(3rem, 5vw + 1.25rem, 6.6rem);
+  --text-display-s: clamp(2.375rem, 3.6vw + 1rem, 4.75rem);
+  --text-display: clamp(3rem, 5vw + 1.25rem, 6.25rem);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);

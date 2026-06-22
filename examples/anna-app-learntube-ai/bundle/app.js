@@ -2,6 +2,8 @@ import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
 const EXECUTA_HANDLE = "learntube-processor";
 const DEV_FALLBACK_TOOL_ID = "tool-test-learntube-processor-12345678";
+const APP_VERSION = "0.1.2";
+const MIN_LOCAL_TRANSCRIPT_CHARS = 80;
 const TOOL_ID =
   (typeof window !== "undefined" &&
     window.__ANNA_TOOL_IDS__ &&
@@ -29,12 +31,17 @@ const ROUTES = [
   { id: "history", title: "History", kicker: "Saved workspaces" },
 ];
 const ROUTE_IDS = new Set(ROUTES.map((route) => route.id));
-const FEATURE_ROUTES = ["notes", "flashcards", "quiz", "actions", "roadmap", "mentor", "history"];
+
+const SOURCE_MODE_LABELS = {
+  executa: "Executa analysis",
+  "local-transcript": "Local transcript draft",
+  demo: "Demo workspace",
+  imported: "Saved workspace",
+};
 
 const els = {
   body: document.body,
   runtime: $("#runtime-pill"),
-  routeNav: $("#route-nav"),
   pageTitle: $("#page-title"),
   pageKicker: $("#page-kicker"),
   form: $("#learn-form"),
@@ -58,6 +65,7 @@ const els = {
   mentorForm: $("#mentor-form"),
   mentorQuestion: $("#mentor-question"),
   saveState: $("#save-state"),
+  appVersion: $("[data-app-version]"),
   toastRegion: $("#toast-region"),
 };
 
@@ -94,7 +102,7 @@ async function init() {
   } catch (error) {
     state.connected = false;
     setRuntime("Preview", "warn");
-    setHelper("Standalone preview. Runtime calls use local demo data.", "warn");
+    setHelper("Preview mode. Paste transcript text to build locally, or use Load demo.", "warn");
     console.warn("[learntube-ai] Anna runtime unavailable:", error?.message || error);
   }
 
@@ -103,6 +111,7 @@ async function init() {
 }
 
 function bindUi() {
+  if (els.appVersion) els.appVersion.textContent = `LearnTube AI - Anna App - v${APP_VERSION}`;
   els.form.addEventListener("submit", onLearn);
   els.sampleBtn.addEventListener("click", loadDemo);
   els.resetBtn.addEventListener("click", resetWorkspace);
@@ -153,7 +162,8 @@ async function onLearn(event) {
     });
     const enhanced = await enhanceWorkspace(base);
     applyWorkspace(enhanced, { save: true, toast: "Workspace ready." });
-    setHelper("Workspace ready. Dashboard updated.", "ok");
+    const mode = state.current?.sourceMode === "local-transcript" ? "Local transcript draft ready." : "Workspace ready.";
+    setHelper(`${mode} Dashboard updated.`, "ok");
     try {
       await state.anna?.chat?.write_message?.({
         role: "user",
@@ -172,24 +182,40 @@ async function onLearn(event) {
 }
 
 async function processVideos(input) {
+  const hasTranscript = hasUsableTranscript(input.manualTranscript);
   if (!state.connected || !state.anna?.tools?.invoke) {
-    return buildDemoWorkspace(input);
+    if (hasTranscript) {
+      return buildTranscriptWorkspace(input, {
+        warning: "Built locally from pasted transcript because Anna runtime is not connected.",
+      });
+    }
+    throw new Error("Anna runtime is not connected. Paste transcript text to build locally, or use Load demo for a sample workspace.");
   }
   try {
-    const reply = await state.anna.tools.invoke({
-      tool_id: TOOL_ID,
-      method: "process_videos",
-      args: {
-        urls: input.urls,
-        manual_transcript: input.manualTranscript,
-        goal: input.goal,
-        days: input.days,
-      },
+    const reply = await invokeProcessor("process_videos", {
+      urls: input.urls,
+      manual_transcript: input.manualTranscript,
+      goal: input.goal,
+      days: input.days,
     });
-    return toolData(reply).workspace || toolData(reply);
+    const data = toolData(reply);
+    const workspace = data.workspace || data;
+    if (!workspace || typeof workspace !== "object") {
+      throw new Error("The processor returned an empty workspace.");
+    }
+    return {
+      ...workspace,
+      sourceMode: workspace.sourceMode || "executa",
+      warnings: arrayOfStrings(workspace.warnings, []),
+    };
   } catch (error) {
-    console.warn("[learntube-ai] Executa processor unavailable, using local builder:", error?.message || error);
-    return buildDemoWorkspace(input);
+    console.warn("[learntube-ai] Executa processor unavailable:", error?.message || error);
+    if (hasTranscript) {
+      return buildTranscriptWorkspace(input, {
+        warning: `Built locally from pasted transcript because the Executa processor was unavailable: ${formatError(error)}`,
+      });
+    }
+    throw new Error(`Could not reach the LearnTube processor: ${formatError(error)}. Start your Anna Agent for URL extraction, or paste transcript text and retry.`);
   }
 }
 
@@ -348,6 +374,7 @@ function renderPanel() {
 
 function renderDashboard() {
   const w = state.current;
+  const warnings = arrayOfStrings(w.warnings, []);
   const featureLinks = [
     { route: "notes", label: "Notes", meta: `${w.detailedNotes.length} sections`, text: "Read the distilled explanation and lesson-specific details." },
     { route: "flashcards", label: "Cards", meta: `${w.flashcards.length} cards`, text: "Flip through recall prompts and mark what needs review." },
@@ -364,6 +391,8 @@ function renderDashboard() {
       </div>
       <div class="panel-actions">
         <span class="difficulty">${escapeHtml(w.difficulty)}</span>
+        <span class="tag" data-tone="${w.sourceMode === "local-transcript" ? "warn" : "neutral"}">${escapeHtml(sourceModeLabel(w.sourceMode))}</span>
+        ${warnings.length ? `<span class="tag" data-tone="warn">Review evidence</span>` : ""}
         ${w.llmEnhanced ? `<span class="tag">Anna LLM refined</span>` : `<span class="tag">Deterministic draft</span>`}
       </div>
     </div>
@@ -376,6 +405,7 @@ function renderDashboard() {
         <div class="tag-row">
           ${w.prerequisites.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("")}
         </div>
+        ${warnings.length ? `<p class="evidence-warning">${escapeHtml(warnings[0])}</p>` : ""}
       </section>
       <section class="feature-index" aria-label="Workspace pages">
         ${featureLinks.map((item) => `
@@ -552,7 +582,7 @@ function renderRoadmap() {
           <p>${escapeHtml(node.note)}</p>
           <div class="card-actions">
             <span class="tag">${escapeHtml(node.status)}</span>
-            <button class="btn btn--quiet" type="button" data-action="mark-roadmap" data-node-id="${escapeAttr(node.id)}">Mark done</button>
+            ${renderRoadmapAction(node)}
           </div>
         </section>
       `).join("")}
@@ -644,7 +674,10 @@ function onRouteClick(event) {
 
 function scrollToRouteStart() {
   const target = state.route === "home" ? $("#home-page") : $("#workspace-page");
-  target?.scrollIntoView({ block: "start" });
+  if (!target) return;
+  const navHeight = els.body.clientWidth < 960 ? $(".side-nav")?.getBoundingClientRect().height || 0 : 0;
+  const top = target.getBoundingClientRect().top + window.scrollY - navHeight - 12;
+  window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
 }
 
 async function onPanelClick(event) {
@@ -706,8 +739,7 @@ async function onPanelClick(event) {
 
   if (action === "mark-roadmap") {
     const node = state.current.roadmap.find((entry) => entry.id === target.dataset.nodeId);
-    if (node && node.status !== "done") {
-      node.status = "done";
+    if (node && completeRoadmapNode(node)) {
       if (!state.profile.completedTopics.includes(node.title)) {
         state.profile.completedTopics.push(node.title);
       }
@@ -725,6 +757,8 @@ async function onPanelClick(event) {
     state.history = [];
     await storageSet(STORAGE.historyIndex, []);
     showToast("History cleared.");
+    renderAll();
+    return;
   }
 
   renderAll();
@@ -791,11 +825,7 @@ async function askGroundedQuestion(question) {
 
   if (state.connected && state.anna?.tools?.invoke) {
     try {
-      const reply = await state.anna.tools.invoke({
-        tool_id: TOOL_ID,
-        method: "answer_question",
-        args: { workspace: compact, question },
-      });
+      const reply = await invokeProcessor("answer_question", { workspace: compact, question });
       return toolData(reply).answer || "I could not answer from the available lesson evidence.";
     } catch (error) {
       console.warn("[learntube-ai] mentor Executa unavailable, using local answer:", error?.message || error);
@@ -805,6 +835,27 @@ async function askGroundedQuestion(question) {
   return localGroundedAnswer(state.current, question);
 }
 
+async function invokeProcessor(method, args) {
+  let lastError = null;
+  for (const toolId of candidateToolIds()) {
+    try {
+      return await state.anna.tools.invoke({ tool_id: toolId, method, args });
+    } catch (error) {
+      lastError = error;
+      if (!isToolIdRecoverable(error)) break;
+    }
+  }
+  throw lastError || new Error("The LearnTube processor did not respond.");
+}
+
+function candidateToolIds() {
+  return unique([TOOL_ID, DEV_FALLBACK_TOOL_ID]);
+}
+
+function isToolIdRecoverable(error) {
+  return /not whitelisted|host_api\.tools|unknown_tool|permission denied/i.test(formatError(error));
+}
+
 function loadDemo() {
   const workspace = buildDemoWorkspace({
     urls: ["https://www.youtube.com/watch?v=binary-search-demo"],
@@ -812,7 +863,8 @@ function loadDemo() {
     goal: "DSA interview readiness",
     days: 30,
   });
-  applyWorkspace(workspace, { save: true, toast: "Demo workspace loaded." });
+  applyWorkspace(workspace, { save: true });
+  setHelper("Demo workspace loaded.", "ok");
 }
 
 function resetWorkspace() {
@@ -918,10 +970,21 @@ async function storageSet(key, value) {
 }
 
 function normalizeWorkspace(input) {
-  const fallback = buildDemoWorkspace({});
+  const fallback = buildWorkspaceDefaults(input || {});
   const w = { ...fallback, ...(input || {}) };
   const title = stringOr(w.title, fallback.title);
   const id = stringOr(w.id, stableId(title + JSON.stringify(w.videoIds || [])));
+  const quiz = arrayOfObjects(w.quiz, fallback.quiz).map((q, index) => {
+    const choices = arrayOfStrings(q.choices, fallback.quiz[index]?.choices || ["Review the notes", "Skip the topic"]).slice(0, 4);
+    return {
+      id: stringOr(q.id, `quiz-${index + 1}`),
+      question: stringOr(q.question, "What did the lesson explain?"),
+      choices,
+      answerIndex: clampNumber(q.answerIndex, 0, Math.max(0, choices.length - 1), 0),
+      concept: stringOr(q.concept, w.subtopic || "Concept"),
+      explanation: stringOr(q.explanation, "Use the notes to review this point."),
+    };
+  });
   return {
     ...w,
     id,
@@ -931,24 +994,26 @@ function normalizeWorkspace(input) {
     subtopic: stringOr(w.subtopic, title),
     difficulty: stringOr(w.difficulty, "Beginner"),
     goal: stringOr(w.goal, els.goal?.value || "Study plan"),
+    sourceMode: stringOr(w.sourceMode, fallback.sourceMode),
+    warnings: arrayOfStrings(w.warnings, fallback.warnings),
     summary: stringOr(w.summary, fallback.summary),
     prerequisites: arrayOfStrings(w.prerequisites, fallback.prerequisites),
     transcriptSnippets: arrayOfStrings(w.transcriptSnippets, fallback.transcriptSnippets).slice(0, 12),
-    chapters: arrayOfObjects(w.chapters, fallback.chapters),
-    detailedNotes: arrayOfObjects(w.detailedNotes, fallback.detailedNotes),
+    chapters: arrayOfObjects(w.chapters, fallback.chapters).map((chapter, index) => ({
+      time: stringOr(chapter.time, index === 0 ? "00:00" : `${String(index * 2).padStart(2, "0")}:00`),
+      title: stringOr(chapter.title, `Moment ${index + 1}`),
+      note: stringOr(chapter.note, "Review this part of the source material."),
+    })),
+    detailedNotes: arrayOfObjects(w.detailedNotes, fallback.detailedNotes).map((note, index) => ({
+      heading: stringOr(note.heading, index === 0 ? "Core idea" : `Note ${index + 1}`),
+      points: arrayOfStrings(note.points, fallback.detailedNotes[index]?.points || ["Review the source evidence."]),
+    })),
     flashcards: arrayOfObjects(w.flashcards, fallback.flashcards).map((card, index) => ({
       id: stringOr(card.id, `card-${index + 1}`),
       front: stringOr(card.front, "What is the main idea?"),
       back: stringOr(card.back, "Review the lesson summary."),
     })),
-    quiz: arrayOfObjects(w.quiz, fallback.quiz).map((q, index) => ({
-      id: stringOr(q.id, `quiz-${index + 1}`),
-      question: stringOr(q.question, "What did the lesson explain?"),
-      choices: arrayOfStrings(q.choices, ["Concept", "Tool", "Syntax"]).slice(0, 4),
-      answerIndex: clampNumber(q.answerIndex, 0, 3, 0),
-      concept: stringOr(q.concept, w.subtopic || "Concept"),
-      explanation: stringOr(q.explanation, "Use the notes to review this point."),
-    })),
+    quiz,
     actionItems: arrayOfObjects(w.actionItems, fallback.actionItems).map((item, index) => ({
       id: stringOr(item.id, `action-${index + 1}`),
       title: stringOr(item.title, "Review the lesson"),
@@ -969,6 +1034,101 @@ function normalizeWorkspace(input) {
   };
 }
 
+function buildWorkspaceDefaults(input = {}) {
+  const transcript = stringOr(input.manualTranscript || input.transcript || "", "");
+  const snippets = extractTranscriptSnippets(transcript);
+  const title = stringOr(input.title, deriveWorkspaceTitle(input, snippets));
+  const concepts = deriveConcepts(`${title} ${transcript}`).slice(0, 5);
+  const primary = concepts[0] || title;
+  const sourceLabel = stringOr(input.sourceLabel, (input.urls || [])[0] || "Manual transcript");
+  const summary = stringOr(
+    input.summary,
+    snippets[0]
+      ? `${title} focuses on ${concepts.slice(0, 3).join(", ") || "the core lesson ideas"}. Review the notes and evidence before applying it.`
+      : "Add transcript evidence or run the Executa processor to build a more specific study workspace.",
+  );
+  const notePoints = snippets.length
+    ? snippets.slice(0, 4)
+    : ["Capture the main claim from the source.", "Add examples or transcript snippets for stronger recall.", "Review the topic again before using it elsewhere."];
+  const roadmapConcepts = unique(["Foundations", primary, "Practice", "Revision", concepts[1] || "Next topic"]);
+  return {
+    id: stableId(`${title}:${sourceLabel}:${transcript.slice(0, 80)}`),
+    title,
+    sourceLabel,
+    topic: concepts[1] || "Learning",
+    subtopic: primary,
+    difficulty: "Beginner",
+    goal: input.goal || "Study plan",
+    sourceMode: "imported",
+    warnings: [],
+    summary,
+    prerequisites: concepts.length ? concepts.slice(0, 3) : ["Source evidence", "Core idea", "Practice"],
+    transcriptSnippets: snippets.length ? snippets : ["No transcript snippets were available."],
+    chapters: (snippets.length ? snippets.slice(0, 4) : notePoints.slice(0, 3)).map((snippet, index) => ({
+      time: index === 0 ? "00:00" : `${String(index * 2).padStart(2, "0")}:00`,
+      title: index === 0 ? "Opening idea" : `Evidence ${index + 1}`,
+      note: snippet,
+    })),
+    detailedNotes: [
+      { heading: "Core idea", points: notePoints },
+      {
+        heading: "Review focus",
+        points: [
+          `Explain ${primary} in your own words.`,
+          "Turn the source into one example and one counterexample.",
+          "Revisit weak points during the next revision session.",
+        ],
+      },
+    ],
+    flashcards: (concepts.length ? concepts.slice(0, 4) : ["Main idea", "Evidence", "Practice"]).map((concept, index) => ({
+      id: `card-${slugify(concept)}-${index + 1}`,
+      front: `What should you remember about ${concept}?`,
+      back: snippets[index] || summary,
+    })),
+    quiz: [
+      {
+        id: "quiz-main-idea",
+        question: `Which idea best matches ${title}?`,
+        choices: [primary, "An unrelated detail", "A formatting choice", "A skipped section"],
+        answerIndex: 0,
+        concept: primary,
+        explanation: "The answer is grounded in the available transcript and notes.",
+      },
+      {
+        id: "quiz-review",
+        question: "What should you do after reviewing this lesson?",
+        choices: ["Practice recall", "Ignore weak concepts", "Delete the notes", "Skip revision"],
+        answerIndex: 0,
+        concept: "Revision",
+        explanation: "Recall and spaced revision keep the lesson active.",
+      },
+    ],
+    actionItems: [
+      { id: "action-explain", title: `Explain ${primary}`, reason: "Shows whether the concept is understood.", effort: "10 min" },
+      { id: "action-practice", title: "Create one practice example", reason: "Turns passive watching into active use.", effort: "20 min" },
+      { id: "action-revise", title: "Schedule the next review", reason: "Spaced repetition reduces forgetting.", effort: "5 min" },
+    ],
+    roadmap: roadmapConcepts.slice(0, 5).map((concept, index) => ({
+      id: `node-${slugify(concept)}-${index + 1}`,
+      title: concept,
+      note: index === 0 ? "Confirm the prerequisite idea." : `Review ${concept} with examples.`,
+      status: index === 0 ? "done" : index === 1 ? "current" : index < 4 ? "next" : "locked",
+    })),
+    weakConcepts: concepts.slice(1, 3).length ? concepts.slice(1, 3) : ["Evidence review"],
+    codeExample: input.codeExample || "Add lesson code or transcript excerpts to capture code patterns.",
+    nextRevisionLabel: "1 day",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildTranscriptWorkspace(input = {}, opts = {}) {
+  return {
+    ...buildWorkspaceDefaults(input),
+    sourceMode: "local-transcript",
+    warnings: [opts.warning || "Built locally from pasted transcript. Connect the Executa processor for video metadata and captions."],
+  };
+}
+
 function buildDemoWorkspace(input = {}) {
   const transcript = input.manualTranscript || "";
   const title = transcript.toLowerCase().includes("sorting") ? "Sorting Patterns" : "Binary Search Explained";
@@ -980,6 +1140,8 @@ function buildDemoWorkspace(input = {}) {
     subtopic: title.includes("Sorting") ? "Sorting" : "Binary Search",
     difficulty: "Beginner",
     goal: input.goal || "DSA interview readiness",
+    sourceMode: "demo",
+    warnings: [],
     summary:
       "Binary search cuts a sorted search space in half after each comparison. It is fast because every step removes the half that cannot contain the target.",
     prerequisites: ["Sorted arrays", "Loops", "Indexes"],
@@ -1065,6 +1227,32 @@ function buildDemoWorkspace(input = {}) {
   };
 }
 
+function renderRoadmapAction(node) {
+  if (node.status === "done") {
+    return `<span class="tag" data-tone="success">Complete</span>`;
+  }
+  if (node.status === "locked") {
+    return `<button class="btn btn--quiet" type="button" disabled title="Complete earlier topics first">Locked</button>`;
+  }
+  return `<button class="btn btn--quiet" type="button" data-action="mark-roadmap" data-node-id="${escapeAttr(node.id)}">Mark done</button>`;
+}
+
+function completeRoadmapNode(node) {
+  if (!node || !["current", "next"].includes(node.status)) return false;
+  node.status = "done";
+  const hasCurrent = state.current.roadmap.some((entry) => entry.status === "current");
+  if (!hasCurrent) {
+    const next = state.current.roadmap.find((entry) => entry.status === "next");
+    if (next) next.status = "current";
+  }
+  const nextCount = state.current.roadmap.filter((entry) => entry.status === "next").length;
+  if (nextCount < 2) {
+    const locked = state.current.roadmap.find((entry) => entry.status === "locked");
+    if (locked) locked.status = "next";
+  }
+  return true;
+}
+
 function computeWeakConcepts() {
   if (!state.current) return [];
   const wrong = state.current.quiz
@@ -1110,6 +1298,77 @@ function compactWorkspaceForPrompt(workspace) {
     flashcards: workspace.flashcards,
     quizWeakConcepts: computeWeakConcepts(),
   };
+}
+
+function sourceModeLabel(mode) {
+  return SOURCE_MODE_LABELS[mode] || SOURCE_MODE_LABELS.imported;
+}
+
+function hasUsableTranscript(value) {
+  return String(value || "").trim().length >= MIN_LOCAL_TRANSCRIPT_CHARS;
+}
+
+function deriveWorkspaceTitle(input, snippets) {
+  const url = (input.urls || [])[0] || "";
+  const transcript = String(input.manualTranscript || "");
+  const lower = transcript.toLowerCase();
+  if (lower.includes("binary search")) return "Binary Search Explained";
+  if (lower.includes("sorting")) return "Sorting Patterns";
+  if (lower.includes("system design")) return "System Design Lesson";
+  if (lower.includes("javascript")) return "JavaScript Lesson";
+  const videoId = parseYouTubeId(url);
+  if (videoId) return `YouTube Lesson ${videoId}`;
+  const first = snippets?.[0] || "";
+  return first ? titleFromSentence(first) : "Transcript Study Workspace";
+}
+
+function parseYouTubeId(url) {
+  const text = String(url || "");
+  const match = text.match(/[?&]v=([^&]+)/) || text.match(/youtu\.be\/([^?&]+)/);
+  return match ? match[1].slice(0, 11) : "";
+}
+
+function titleFromSentence(sentence) {
+  const words = String(sentence || "")
+    .replace(/[^a-zA-Z0-9 ]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6);
+  return words.length ? words.map(toTitleCase).join(" ") : "Transcript Study Workspace";
+}
+
+function extractTranscriptSnippets(transcript) {
+  return String(transcript || "")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 24)
+    .slice(0, 8);
+}
+
+function deriveConcepts(text) {
+  const stop = new Set([
+    "about", "after", "again", "array", "because", "before", "being", "could", "every", "lesson",
+    "their", "there", "these", "thing", "those", "through", "using", "video", "watch", "where", "which",
+    "while", "works", "would", "search", "sorted",
+  ]);
+  const counts = new Map();
+  for (const raw of String(text || "").toLowerCase().match(/[a-z][a-z0-9-]{4,}/g) || []) {
+    const word = raw.replace(/-+/g, " ");
+    if (stop.has(word)) continue;
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([word]) => toTitleCase(word))
+    .slice(0, 8);
+}
+
+function toTitleCase(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .map((word) => word ? word[0].toUpperCase() + word.slice(1) : "")
+    .join(" ");
 }
 
 function compactHistoryRecord(workspace) {
