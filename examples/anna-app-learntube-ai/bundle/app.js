@@ -17,9 +17,26 @@ const STORAGE = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+const ROUTES = [
+  { id: "home", title: "Home", kicker: "LearnTube AI" },
+  { id: "dashboard", title: "Dashboard", kicker: "Study workspace" },
+  { id: "notes", title: "Notes", kicker: "Written memory" },
+  { id: "flashcards", title: "Cards", kicker: "Recall practice" },
+  { id: "quiz", title: "Quiz", kicker: "Check understanding" },
+  { id: "actions", title: "Tasks", kicker: "Next actions" },
+  { id: "roadmap", title: "Roadmap", kicker: "Learning path" },
+  { id: "mentor", title: "Mentor", kicker: "Grounded questions" },
+  { id: "history", title: "History", kicker: "Saved workspaces" },
+];
+const ROUTE_IDS = new Set(ROUTES.map((route) => route.id));
+const FEATURE_ROUTES = ["notes", "flashcards", "quiz", "actions", "roadmap", "mentor", "history"];
+
 const els = {
   body: document.body,
   runtime: $("#runtime-pill"),
+  routeNav: $("#route-nav"),
+  pageTitle: $("#page-title"),
+  pageKicker: $("#page-kicker"),
   form: $("#learn-form"),
   urls: $("#video-urls"),
   goal: $("#study-goal"),
@@ -30,7 +47,6 @@ const els = {
   resetBtn: $("#reset-btn"),
   exportBtn: $("#export-btn"),
   helper: $("#form-helper"),
-  tabs: $("#workspace-tabs"),
   panel: $("#tab-panel"),
   graph: $("#knowledge-graph"),
   weakList: $("#weak-list"),
@@ -48,7 +64,7 @@ const els = {
 const state = {
   anna: null,
   connected: false,
-  activeTab: "overview",
+  route: "home",
   current: null,
   history: [],
   profile: {
@@ -68,7 +84,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   bindUi();
-  renderEmpty();
+  renderAll();
 
   try {
     state.anna = await AnnaAppRuntime.connect();
@@ -91,7 +107,7 @@ function bindUi() {
   els.sampleBtn.addEventListener("click", loadDemo);
   els.resetBtn.addEventListener("click", resetWorkspace);
   els.exportBtn.addEventListener("click", exportCheatSheet);
-  els.tabs.addEventListener("click", onTabClick);
+  document.addEventListener("click", onRouteClick);
   els.panel.addEventListener("click", onPanelClick);
   els.mentorForm.addEventListener("submit", onMentorAsk);
 }
@@ -137,6 +153,7 @@ async function onLearn(event) {
     });
     const enhanced = await enhanceWorkspace(base);
     applyWorkspace(enhanced, { save: true, toast: "Workspace ready." });
+    setHelper("Workspace ready. Dashboard updated.", "ok");
     try {
       await state.anna?.chat?.write_message?.({
         role: "user",
@@ -158,17 +175,22 @@ async function processVideos(input) {
   if (!state.connected || !state.anna?.tools?.invoke) {
     return buildDemoWorkspace(input);
   }
-  const reply = await state.anna.tools.invoke({
-    tool_id: TOOL_ID,
-    method: "process_videos",
-    args: {
-      urls: input.urls,
-      manual_transcript: input.manualTranscript,
-      goal: input.goal,
-      days: input.days,
-    },
-  });
-  return toolData(reply).workspace || toolData(reply);
+  try {
+    const reply = await state.anna.tools.invoke({
+      tool_id: TOOL_ID,
+      method: "process_videos",
+      args: {
+        urls: input.urls,
+        manual_transcript: input.manualTranscript,
+        goal: input.goal,
+        days: input.days,
+      },
+    });
+    return toolData(reply).workspace || toolData(reply);
+  } catch (error) {
+    console.warn("[learntube-ai] Executa processor unavailable, using local builder:", error?.message || error);
+    return buildDemoWorkspace(input);
+  }
 }
 
 async function enhanceWorkspace(baseWorkspace) {
@@ -215,12 +237,13 @@ async function enhanceWorkspace(baseWorkspace) {
 
 function applyWorkspace(workspace, opts = {}) {
   state.current = normalizeWorkspace(workspace);
-  state.activeTab = "overview";
+  state.route = "dashboard";
   state.cardProgress = state.current.progress?.cards || {};
   state.quizAnswers = state.current.progress?.quiz || {};
   state.mentorAnswer = "";
   updateStudyProfile();
   renderAll();
+  scrollToRouteStart();
   if (opts.save) void saveWorkspace();
   if (opts.toast) showToast(opts.toast);
 }
@@ -250,17 +273,27 @@ async function saveWorkspace() {
 }
 
 function renderAll() {
+  renderRoute();
   renderMetrics();
-  renderTabs();
+  renderNav();
   renderPanel();
   renderSideRail();
+}
+
+function renderRoute() {
+  if (!ROUTE_IDS.has(state.route)) state.route = "home";
+  els.body.dataset.route = state.route;
+  const route = ROUTES.find((item) => item.id === state.route) || ROUTES[0];
+  if (els.pageTitle) els.pageTitle.textContent = route.title;
+  if (els.pageKicker) els.pageKicker.textContent = state.current?.title || route.kicker;
 }
 
 function renderEmpty() {
   els.panel.innerHTML = `
     <section class="empty-state">
-      <h2>Paste a lesson to start.</h2>
-      <p>Your generated notes, quiz, flashcards, roadmap, and revision queue will appear here.</p>
+      <h2>No workspace yet.</h2>
+      <p>Start from the homepage, paste a video or transcript, and LearnTube AI will build the pages here.</p>
+      <button class="btn btn--primary" data-route="home" type="button">Create workspace</button>
     </section>
   `;
   els.graph.innerHTML = "";
@@ -282,36 +315,47 @@ function renderMetrics() {
   els.revision.textContent = state.current.nextRevisionLabel || "1 day";
 }
 
-function renderTabs() {
-  for (const tab of $$(".tab")) {
-    tab.classList.toggle("is-active", tab.dataset.tab === state.activeTab);
+function renderNav() {
+  for (const link of $$(".route-link")) {
+    const isActive = link.dataset.route === state.route;
+    link.classList.toggle("is-active", isActive);
+    link.setAttribute("aria-current", isActive ? "page" : "false");
   }
 }
 
 function renderPanel() {
-  if (!state.current) {
+  if (state.route === "home") return;
+  if (!state.current && state.route !== "history") {
     renderEmpty();
     return;
   }
   const renderers = {
-    overview: renderOverview,
+    dashboard: renderDashboard,
     notes: renderNotes,
     flashcards: renderFlashcards,
     quiz: renderQuiz,
     actions: renderActions,
     roadmap: renderRoadmap,
     history: renderHistory,
-    ask: renderAsk,
+    mentor: renderAsk,
   };
-  const html = (renderers[state.activeTab] || renderOverview)();
+  const html = (renderers[state.route] || renderDashboard)();
   els.panel.innerHTML = html;
   els.panel.classList.remove("reveal");
   void els.panel.offsetWidth;
   els.panel.classList.add("reveal");
 }
 
-function renderOverview() {
+function renderDashboard() {
   const w = state.current;
+  const featureLinks = [
+    { route: "notes", label: "Notes", meta: `${w.detailedNotes.length} sections`, text: "Read the distilled explanation and lesson-specific details." },
+    { route: "flashcards", label: "Cards", meta: `${w.flashcards.length} cards`, text: "Flip through recall prompts and mark what needs review." },
+    { route: "quiz", label: "Quiz", meta: `${w.quiz.length} questions`, text: "Answer checks that update weak concepts automatically." },
+    { route: "actions", label: "Tasks", meta: `${w.actionItems.length} actions`, text: "Turn the lesson into practice steps you can finish today." },
+    { route: "roadmap", label: "Roadmap", meta: `${w.roadmap.length} steps`, text: "See what is done, current, next, and locked." },
+    { route: "mentor", label: "Mentor", meta: "Grounded ask", text: "Ask questions using only the current workspace evidence." },
+  ];
   return `
     <div class="panel-head">
       <div>
@@ -323,14 +367,24 @@ function renderOverview() {
         ${w.llmEnhanced ? `<span class="tag">Anna LLM refined</span>` : `<span class="tag">Deterministic draft</span>`}
       </div>
     </div>
-    <div class="workspace-grid">
-      <section class="open-band">
-        <h3>${escapeHtml(w.topic)} / ${escapeHtml(w.subtopic)}</h3>
-        <p>${escapeHtml(w.summary)}</p>
+    <div class="dashboard-shell">
+      <section class="dashboard-lead">
+        <div>
+          <h3>${escapeHtml(w.topic)} / ${escapeHtml(w.subtopic)}</h3>
+          <p>${escapeHtml(w.summary)}</p>
+        </div>
         <div class="tag-row">
           ${w.prerequisites.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("")}
         </div>
-        <pre class="code-card">${escapeHtml(w.codeExample)}</pre>
+      </section>
+      <section class="feature-index" aria-label="Workspace pages">
+        ${featureLinks.map((item) => `
+          <button class="feature-link" data-route="${escapeAttr(item.route)}" type="button">
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.meta)}</strong>
+            <em>${escapeHtml(item.text)}</em>
+          </button>
+        `).join("")}
       </section>
       <section class="open-band">
         <h3>Timeline</h3>
@@ -343,6 +397,10 @@ function renderOverview() {
             </li>
           `).join("")}
         </ol>
+      </section>
+      <section class="open-band open-band--code">
+        <h3>Code pattern</h3>
+        <pre class="code-card">${escapeHtml(w.codeExample)}</pre>
       </section>
     </div>
   `;
@@ -507,7 +565,7 @@ function renderHistory() {
     <div class="panel-head">
       <div>
         <span class="study-title">${state.history.length} saved workspaces</span>
-        <h2>History</h2>
+        <h2>Saved workspaces</h2>
       </div>
       <div class="panel-actions">
         <button class="btn btn--quiet" type="button" data-action="clear-history">Clear</button>
@@ -557,7 +615,9 @@ function renderAsk() {
 
 function renderSideRail() {
   if (!state.current) {
-    renderEmpty();
+    els.graph.innerHTML = "";
+    els.weakList.innerHTML = `<span class="tag">No quiz yet</span>`;
+    els.nextList.innerHTML = `<li>Roadmap appears after analysis.</li>`;
     return;
   }
   const weak = computeWeakConcepts();
@@ -572,18 +632,27 @@ function renderSideRail() {
   els.graph.innerHTML = renderGraphSvg(state.current.roadmap);
 }
 
-function onTabClick(event) {
-  const tab = event.target.closest("[data-tab]");
-  if (!tab) return;
-  state.activeTab = tab.dataset.tab;
+function onRouteClick(event) {
+  const trigger = event.target.closest("a[data-route], button[data-route]");
+  if (!trigger || !ROUTE_IDS.has(trigger.dataset.route)) return;
+  event.preventDefault();
+  state.route = trigger.dataset.route;
   renderAll();
-  els.panel.focus({ preventScroll: true });
+  scrollToRouteStart();
+  if (state.route !== "home") els.panel.focus({ preventScroll: true });
+}
+
+function scrollToRouteStart() {
+  const target = state.route === "home" ? $("#home-page") : $("#workspace-page");
+  target?.scrollIntoView({ block: "start" });
 }
 
 async function onPanelClick(event) {
   const target = event.target.closest("[data-action]");
-  if (!target || !state.current) return;
+  if (!target) return;
   const action = target.dataset.action;
+  const historyOnly = action === "load-history" || action === "clear-history";
+  if (!state.current && !historyOnly) return;
 
   if (action === "flip-card") {
     const id = target.dataset.cardId;
@@ -659,7 +728,7 @@ async function onPanelClick(event) {
   }
 
   renderAll();
-  await saveWorkspace();
+  if (state.current) await saveWorkspace();
 }
 
 async function onMentorAsk(event) {
@@ -672,7 +741,7 @@ async function onMentorAsk(event) {
   if (!question) return;
 
   setBusy(true);
-  state.activeTab = "ask";
+  state.route = "mentor";
   state.mentorAnswer = "Checking the lesson evidence...";
   renderAll();
   try {
@@ -721,12 +790,16 @@ async function askGroundedQuestion(question) {
   }
 
   if (state.connected && state.anna?.tools?.invoke) {
-    const reply = await state.anna.tools.invoke({
-      tool_id: TOOL_ID,
-      method: "answer_question",
-      args: { workspace: compact, question },
-    });
-    return toolData(reply).answer || "I could not answer from the available lesson evidence.";
+    try {
+      const reply = await state.anna.tools.invoke({
+        tool_id: TOOL_ID,
+        method: "answer_question",
+        args: { workspace: compact, question },
+      });
+      return toolData(reply).answer || "I could not answer from the available lesson evidence.";
+    } catch (error) {
+      console.warn("[learntube-ai] mentor Executa unavailable, using local answer:", error?.message || error);
+    }
   }
 
   return localGroundedAnswer(state.current, question);
@@ -747,8 +820,9 @@ function resetWorkspace() {
   state.cardProgress = {};
   state.quizAnswers = {};
   state.mentorAnswer = "";
-  state.activeTab = "overview";
+  state.route = "home";
   renderAll();
+  scrollToRouteStart();
   showToast("Current workspace reset.");
 }
 
