@@ -1,0 +1,21 @@
+{
+  "name": "anna-app-learntube-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LearnTube AI - Anna App that turns YouTube videos into a learning workspace.",
+  "type": "module",
+  "scripts": {
+    "dev": "anna-app dev --port 5186",
+    "dev:no-llm": "anna-app dev --port 5186 --no-llm",
+    "validate": "anna-app validate --strict",
+    "fixture:verify": "anna-app fixture verify fixtures/happy-path.jsonl",
+    "fixture:summarize": "anna-app fixture summarize fixtures/happy-path.jsonl",
+    "test": "vitest run tests/bundle",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@anna-ai/cli": "^0.1.30",
+    "@playwright/test": "^1.57.0",
+    "vitest": "^2.1.0"
+  }
+}

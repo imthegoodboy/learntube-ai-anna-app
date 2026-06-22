@@ -1,0 +1,33 @@
+name: LearnTube AI Anna App
+
+on:
+  push:
+    paths:
+      - "examples/anna-app-learntube-ai/**"
+      - ".github/workflows/learntube-ai.yml"
+  pull_request:
+    paths:
+      - "examples/anna-app-learntube-ai/**"
+      - ".github/workflows/learntube-ai.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/anna-app-learntube-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: examples/anna-app-learntube-ai/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - run: npm test
+      - run: npm run fixture:verify
+      - run: npm run validate

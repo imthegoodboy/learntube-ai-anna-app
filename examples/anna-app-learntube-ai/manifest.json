@@ -1,0 +1,82 @@
+{
+  "schema": 2,
+  "permissions": [
+    "tools.invoke",
+    "chat.write_message",
+    "storage.read",
+    "storage.write",
+    "ui.svg"
+  ],
+  "required_executas": [
+    {
+      "tool_id": "bundled:learntube-processor",
+      "min_version": "0.1.0",
+      "version": "latest"
+    }
+  ],
+  "optional_executas": [],
+  "system_prompt_addendum": "The user has the LearnTube AI app open. Treat the app's current learning workspace and the bundled learntube-processor Executa as the source of truth for video-derived study artifacts. When answering questions through this app, ground answers in the selected video's notes, transcript snippets, flashcards, quiz weaknesses, and roadmap. Do not invent unseen transcript content; state when evidence is limited.",
+  "user_message_prefix_template": "[LearnTube AI] {user_message}",
+  "tags": [
+    "education",
+    "youtube",
+    "learning",
+    "flashcards",
+    "quiz",
+    "revision",
+    "anna-app"
+  ],
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": []
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "LearnTube AI",
+        "default": true,
+        "entry": "index.html",
+        "min_size": { "w": 420, "h": 620 },
+        "default_size": { "w": 1180, "h": 820 },
+        "max_size": { "w": 1680, "h": 1200 },
+        "resizable": true,
+        "movable": true,
+        "single_instance": true,
+        "icon": "icon.svg"
+      }
+    ],
+    "host_api": {
+      "tools": ["required:bundled:learntube-processor"],
+      "chat": ["write_message"],
+      "artifact": [],
+      "llm": ["complete"],
+      "fs": [],
+      "storage": ["get", "set", "list", "delete"],
+      "prefs": [],
+      "window": ["set_title"]
+    },
+    "csp_overrides": {
+      "img-src": ["'self'", "data:", "blob:", "https:"],
+      "font-src": ["'self'", "data:"],
+      "style-src": ["'self'"],
+      "script-src": ["'self'"],
+      "connect-src": ["'self'", "https://www.youtube.com", "https://youtu.be", "https://noembed.com"]
+    },
+    "state_merge": "last_writer_wins"
+  },
+  "dev": {
+    "fixtures": ["fixtures/*.jsonl"],
+    "seed_storage": {
+      "learntube-ai:profile": {
+        "xp": 0,
+        "streak": 0,
+        "completedTopics": [],
+        "hardCards": []
+      },
+      "learntube-ai:history:index": []
+    },
+    "user_id": 1
+  }
+}

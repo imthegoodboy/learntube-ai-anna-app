@@ -1,0 +1,9 @@
+{
+  "date": "2026-06-22",
+  "framework": "Anna static-spa examples",
+  "font_stack": "No locked app font stack; LearnTube introduces Bricolage Grotesque + Geist + JetBrains Mono",
+  "palette": "No locked design.md; LearnTube introduces OKLCH dark amber tokens",
+  "motion": "No shared motion library; CSS transform/opacity microinteractions only",
+  "spacing": "4pt Hallmark token scale",
+  "preserve": ["Anna app.json/manifest.json/bundle/executas shape", "bundled Executa handle pattern", "anna-app CLI validation workflow"]
+}

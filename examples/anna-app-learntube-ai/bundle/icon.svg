@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="LearnTube AI">
+  <defs>
+    <linearGradient id="g" x1="18" y1="16" x2="110" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7B84B"/>
+      <stop offset="1" stop-color="#D95E37"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="18" fill="#191411"/>
+  <path d="M29 34c0-7 5-12 12-12h47c7 0 12 5 12 12v60c0 7-5 12-12 12H41c-7 0-12-5-12-12V34Z" fill="#241C16" stroke="#6E4B2D" stroke-width="3"/>
+  <path d="M53 47v34l30-17-30-17Z" fill="url(#g)"/>
+  <path d="M39 91h50M39 36h24M72 36h17" stroke="#F4DFB7" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="40" cy="36" r="3" fill="#F7B84B"/>
+</svg>

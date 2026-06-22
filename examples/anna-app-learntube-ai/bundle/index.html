@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>LearnTube AI</title>
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell" id="app-shell">
+      <header class="topbar" aria-label="LearnTube AI header">
+        <a class="brand" href="#intake" aria-label="LearnTube AI home">
+          <span class="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 4.5h12A2.5 2.5 0 0 1 20.5 7v10A2.5 2.5 0 0 1 18 19.5H6A2.5 2.5 0 0 1 3.5 17V7A2.5 2.5 0 0 1 6 4.5Z" />
+              <path d="m10 8.5 5 3.5-5 3.5v-7Z" />
+            </svg>
+          </span>
+          <span>LearnTube AI</span>
+        </a>
+        <div class="topbar__actions">
+          <span class="runtime-pill" id="runtime-pill">Connecting</span>
+          <button class="icon-btn" id="export-btn" type="button" aria-label="Download cheat sheet" title="Download cheat sheet">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
+              <path d="M5 19h14" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="reset-btn" type="button" aria-label="Reset current workspace" title="Reset workspace">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+              <path d="M20 4v6h-6" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="intake" id="intake" aria-labelledby="intake-title">
+        <div class="intake__copy">
+          <p class="caption">Anna-powered study workspace</p>
+          <h1 id="intake-title">Watch less. Remember more.</h1>
+          <p>
+            Paste a lesson, playlist, or transcript. LearnTube builds notes, recall drills,
+            quizzes, revision timing, and a roadmap that keeps moving after the tab closes.
+          </p>
+        </div>
+        <form class="learn-form" id="learn-form">
+          <label for="video-urls">YouTube URL or playlist</label>
+          <textarea id="video-urls" name="video-urls" rows="3" autocomplete="off" spellcheck="false">https://www.youtube.com/watch?v=binary-search-demo</textarea>
+          <div class="form-grid">
+            <label>
+              Goal
+              <input id="study-goal" type="text" value="DSA interview readiness" />
+            </label>
+            <label>
+              Timeframe
+              <input id="study-days" type="number" min="1" max="365" value="30" />
+            </label>
+          </div>
+          <details class="transcript-box">
+            <summary>Paste transcript or notes for stronger results</summary>
+            <textarea id="manual-transcript" rows="5" spellcheck="true">Binary search works on sorted arrays. Compare the target with the middle value, then discard the half that cannot contain the answer. Repeat until the value is found or the search space is empty. Watch for off-by-one loops, sorted input, and lower-bound or upper-bound variants.</textarea>
+          </details>
+          <div class="form-actions">
+            <button class="btn btn--primary" id="learn-btn" type="submit">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <span class="btn__label">Learn</span>
+            </button>
+            <button class="btn btn--quiet" id="sample-btn" type="button">Load demo</button>
+          </div>
+          <p class="helper" id="form-helper">Transcript extraction uses the bundled Executa when Anna runtime is connected.</p>
+        </form>
+      </section>
+
+      <section class="status-strip" aria-label="Study status">
+        <div>
+          <span class="metric__value" id="xp-value">0</span>
+          <span class="metric__label">XP</span>
+        </div>
+        <div>
+          <span class="metric__value" id="streak-value">0</span>
+          <span class="metric__label">day streak</span>
+        </div>
+        <div>
+          <span class="metric__value" id="progress-value">0%</span>
+          <span class="metric__label">roadmap done</span>
+        </div>
+        <div>
+          <span class="metric__value" id="revision-value">-</span>
+          <span class="metric__label">next revision</span>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Learning workspace">
+        <nav class="tabs" id="workspace-tabs" aria-label="Workspace tabs">
+          <button class="tab is-active" data-tab="overview" type="button">Overview</button>
+          <button class="tab" data-tab="notes" type="button">Notes</button>
+          <button class="tab" data-tab="flashcards" type="button">Flashcards</button>
+          <button class="tab" data-tab="quiz" type="button">Quiz</button>
+          <button class="tab" data-tab="actions" type="button">Action Items</button>
+          <button class="tab" data-tab="roadmap" type="button">Roadmap</button>
+          <button class="tab" data-tab="history" type="button">History</button>
+          <button class="tab" data-tab="ask" type="button">Ask</button>
+        </nav>
+
+        <div class="workbench">
+          <article class="main-panel" id="tab-panel" tabindex="-1"></article>
+          <aside class="side-rail" aria-label="Learning memory">
+            <section class="rail-section">
+              <h2>Knowledge graph</h2>
+              <div class="graph" id="knowledge-graph"></div>
+            </section>
+            <section class="rail-section">
+              <h2>Weak concepts</h2>
+              <div class="weak-list" id="weak-list"></div>
+            </section>
+            <section class="rail-section">
+              <h2>Next topics</h2>
+              <ol class="next-list" id="next-list"></ol>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="mentor-dock" aria-labelledby="mentor-title">
+        <div>
+          <h2 id="mentor-title">AI mentor</h2>
+          <p>Ask from this video only. If transcript evidence is thin, the answer says so.</p>
+        </div>
+        <form id="mentor-form" class="mentor-form">
+          <label for="mentor-question">Question</label>
+          <div class="mentor-input">
+            <input id="mentor-question" type="text" value="Explain binary search like I'm 10." />
+            <button class="btn btn--secondary" type="submit">Ask</button>
+          </div>
+        </form>
+      </section>
+
+      <footer class="foot-line">
+        <span>LearnTube AI - Anna App - v0.1.0</span>
+        <span id="save-state">Not saved yet</span>
+      </footer>
+    </main>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="anna-tool-ids.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

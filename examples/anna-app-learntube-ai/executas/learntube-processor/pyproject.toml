@@ -1,0 +1,23 @@
+[project]
+name = "tool-test-learntube-processor-12345678"
+version = "0.1.0"
+description = "LearnTube Processor - Executa stdio tool for the LearnTube AI Anna App"
+requires-python = ">=3.10"
+authors = [{ name = "Anna Developer" }]
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8"
+]
+
+[project.scripts]
+"tool-test-learntube-processor-12345678" = "learntube_processor:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["learntube_processor"]

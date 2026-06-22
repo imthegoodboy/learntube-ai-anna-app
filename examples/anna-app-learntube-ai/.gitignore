@@ -1,0 +1,12 @@
+node_modules/
+test-results/
+playwright-report/
+dist/
+dist-anna/
+.anna/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+*.log
+bundle/anna-tool-ids.js

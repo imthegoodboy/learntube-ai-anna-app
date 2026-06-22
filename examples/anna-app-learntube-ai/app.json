@@ -1,0 +1,18 @@
+{
+  "slug": "learntube-ai",
+  "name": "LearnTube AI",
+  "version": "0.1.0",
+  "tagline": "Turn YouTube videos into a saved learning workspace.",
+  "description": "LearnTube AI converts one or more YouTube lessons into a structured study cockpit: smart notes, flashcards, quiz mode, action items, a topic roadmap, revision scheduling, weak-concept detection, and a grounded mentor Q&A flow.\n\n**What's inside**\n\n- A static Anna App UI built for focused learning workflows.\n- `learntube-processor` - bundled Python Executa that extracts video metadata/transcripts when available and builds deterministic learning artifacts.\n- Anna-hosted LLM enhancement through `anna.llm.complete` when granted, with deterministic fallback when LLM access is unavailable.\n- Anna storage-backed history, XP, streaks, quiz progress, revision queues, and flashcard difficulty.\n\n**How to use**\n\nPaste a YouTube link or a small playlist of links, optionally paste transcript text, and choose **Learn**. Review the generated workspace, study flashcards, take the quiz, mark action items, ask grounded questions, and export a one-page cheat sheet.",
+  "category": "education",
+  "homepage_url": "https://github.com/imthegoodboy/learntube-ai-anna-app/tree/main/examples/anna-app-learntube-ai",
+  "support_url": "https://github.com/imthegoodboy/learntube-ai-anna-app/issues",
+  "privacy_url": "https://github.com/imthegoodboy/learntube-ai-anna-app/tree/main/examples/anna-app-learntube-ai#privacy",
+  "pricing_model": "free",
+  "_comment_bundled_executas": "The bundled handle maps to ./executas/learntube-processor. Anna publish/push flows mint the real tool_id and write bundle/anna-tool-ids.js; source manifest.json keeps the bundled handle.",
+  "bundled_executas": {
+    "learntube-processor": {
+      "path": "./executas/learntube-processor"
+    }
+  }
+}
