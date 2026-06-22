@@ -2,7 +2,7 @@ import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
 const EXECUTA_HANDLE = "learntube-processor";
 const DEV_FALLBACK_TOOL_ID = "tool-test-learntube-processor-12345678";
-const APP_VERSION = "0.1.2";
+const APP_VERSION = "0.1.3";
 const MIN_LOCAL_TRANSCRIPT_CHARS = 80;
 const TOOL_ID =
   (typeof window !== "undefined" &&
@@ -342,10 +342,18 @@ function renderMetrics() {
 }
 
 function renderNav() {
+  let activeLink = null;
   for (const link of $$(".route-link")) {
     const isActive = link.dataset.route === state.route;
     link.classList.toggle("is-active", isActive);
     link.setAttribute("aria-current", isActive ? "page" : "false");
+    if (isActive) activeLink = link;
+  }
+
+  const nav = $("#route-nav");
+  if (nav && activeLink && nav.scrollWidth > nav.clientWidth) {
+    const left = activeLink.offsetLeft - (nav.clientWidth - activeLink.clientWidth) / 2;
+    nav.scrollTo({ left: Math.max(0, left), behavior: "auto" });
   }
 }
 

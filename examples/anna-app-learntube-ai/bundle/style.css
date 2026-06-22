@@ -131,11 +131,16 @@ textarea:disabled {
 
 .route-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-xs);
+  margin-inline: calc(var(--space-xs) * -1);
   min-width: 0;
-  overflow-x: visible;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding-block-end: var(--space-2xs);
+  padding-inline: var(--space-xs);
+  scroll-padding-inline: var(--space-xs);
+  scroll-snap-type: x proximity;
   scrollbar-width: thin;
 }
 
@@ -161,12 +166,13 @@ textarea:disabled {
 .route-link {
   border-radius: var(--radius-sm);
   flex: 0 0 auto;
+  scroll-snap-align: start;
 }
 
 .route-link.is-active {
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  box-shadow: inset 3px 0 0 var(--color-accent);
+  box-shadow: inset 0 calc(var(--rule-strong) * -1) 0 var(--color-accent);
 }
 
 .text-link {
@@ -1177,7 +1183,14 @@ input:focus-visible {
 
   .route-nav {
     display: grid;
+    margin-inline: 0;
     overflow: visible;
+    padding-inline: 0;
+    scroll-snap-type: none;
+  }
+
+  .route-link.is-active {
+    box-shadow: inset 3px 0 0 var(--color-accent);
   }
 
   .side-nav__meta {
