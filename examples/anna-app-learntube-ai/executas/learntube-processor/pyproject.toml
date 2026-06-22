@@ -1,6 +1,6 @@
 [project]
-name = "tool-test-learntube-processor-12345678"
-version = "0.1.0"
+name = "tool-nikku696969-learntube-processor-adb7bdym"
+version = "0.1.2"
 description = "LearnTube Processor - Executa stdio tool for the LearnTube AI Anna App"
 requires-python = ">=3.10"
 authors = [{ name = "Anna Developer" }]
@@ -13,7 +13,7 @@ dev = [
 ]
 
 [project.scripts]
-"tool-test-learntube-processor-12345678" = "learntube_processor:main"
+"tool-nikku696969-learntube-processor-adb7bdym" = "learntube_processor:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

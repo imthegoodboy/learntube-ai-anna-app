@@ -13,14 +13,14 @@ npm run validate
 npm run test:e2e
 
 anna-app apps push --account $ANNA_HOST --json
-anna-app apps cut 0.1.3 --account $ANNA_HOST --json
+anna-app apps cut 0.1.5 --account $ANNA_HOST --json
 anna-app apps status learntube-ai --account $ANNA_HOST --json
 ```
 
 Release only after review/approval:
 
 ```powershell
-anna-app apps release 0.1.3 --account $ANNA_HOST --json
+anna-app apps release 0.1.5 --account $ANNA_HOST --json
 ```
 
 ## GitHub Publishing

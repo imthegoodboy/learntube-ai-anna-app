@@ -132,8 +132,8 @@ wheels = [
 ]
 
 [[package]]
-name = "tool-test-learntube-processor-12345678"
-version = "0.1.0"
+name = "tool-nikku696969-learntube-processor-adb7bdym"
+version = "0.1.2"
 source = { editable = "." }
 
 [package.optional-dependencies]

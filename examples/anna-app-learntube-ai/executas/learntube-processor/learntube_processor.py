@@ -30,9 +30,9 @@ DEFAULT_TIMEOUT = 8
 
 
 MANIFEST: dict[str, Any] = {
-    "name": "tool-test-learntube-processor-12345678",
+    "name": "tool-nikku696969-learntube-processor-adb7bdym",
     "display_name": "LearnTube Processor",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "description": "Extracts YouTube lesson metadata/transcripts and creates study artifacts.",
     "author": "Anna Developer",
     "homepage": "https://github.com/imthegoodboy/learntube-ai-anna-app",

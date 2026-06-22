@@ -120,6 +120,9 @@ jobs:
                   module = ep.split(":", 1)[0] if ":" in ep else None
                   slug = meta.get("slug")
                   version = str(meta.get("version") or proj.get("version") or "")
+                  app_manifest = exe_dir.parents[1] / "app.json"
+                  app_meta = json.loads(app_manifest.read_text("utf-8")) if app_manifest.exists() else {}
+                  app_version = str(app_meta.get("version") or version)
                   if not (tool_id and module and slug and version):
                       print(f"::warning::{exe_dir} missing tool_id/module/slug/version; skipped", file=sys.stderr)
                       continue
@@ -131,6 +134,7 @@ jobs:
                       "tool_id": tool_id,
                       "slug": slug,
                       "version": version,
+                      "app_version": app_version,
                       "entry": f"{module}.py",
                       "tag": f"{slug}-v{version}",
                   })
@@ -369,4 +373,4 @@ jobs:
         if: ${{ github.event.inputs.lifecycle == 'cut' }}
         working-directory: examples/${{ matrix.app.app_dir }}
         run: |
-          npx anna-app apps cut "${{ matrix.app.version }}" --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+          npx anna-app apps cut "${{ matrix.app.app_version }}" --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}

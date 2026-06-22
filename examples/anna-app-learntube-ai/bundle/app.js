@@ -1,8 +1,8 @@
 import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
 const EXECUTA_HANDLE = "learntube-processor";
-const DEV_FALLBACK_TOOL_ID = "tool-test-learntube-processor-12345678";
-const APP_VERSION = "0.1.3";
+const DEV_FALLBACK_TOOL_ID = "tool-nikku696969-learntube-processor-adb7bdym";
+const APP_VERSION = "0.1.5";
 const MIN_LOCAL_TRANSCRIPT_CHARS = 80;
 const TOOL_ID =
   (typeof window !== "undefined" &&

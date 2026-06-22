@@ -4,7 +4,7 @@ import manifest from "../../manifest.json" with { type: "json" };
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-const TOOL_ID = "tool-test-learntube-processor-12345678";
+const TOOL_ID = "tool-nikku696969-learntube-processor-adb7bdym";
 
 function mocks() {
   const storage = new Map<string, any>();

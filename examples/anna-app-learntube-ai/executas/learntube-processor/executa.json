@@ -1,10 +1,10 @@
 {
   "slug": "learntube-processor",
   "name": "LearnTube Processor",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "executa_type": "tool",
   "description": "Best-effort YouTube metadata/transcript extraction plus deterministic study artifact generation for LearnTube AI.",
-  "tool_id": "tool-test-learntube-processor-12345678",
+  "tool_id": "tool-nikku696969-learntube-processor-adb7bdym",
   "type": "python",
   "enabled": true,
   "distribution": {
@@ -16,28 +16,28 @@
       },
       "binary": {
         "type": "binary",
-        "package_name": "tool-test-learntube-processor-12345678",
-        "executable_name": "tool-test-learntube-processor-12345678",
+        "package_name": "tool-nikku696969-learntube-processor-adb7bdym",
+        "executable_name": "tool-nikku696969-learntube-processor-adb7bdym",
         "supports_protocol": true,
         "binary_urls": {
           "darwin-arm64": {
-            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-darwin-arm64.tar.gz",
-            "entrypoint": "bin/tool-test-learntube-processor-12345678",
+            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.2/tool-nikku696969-learntube-processor-adb7bdym-darwin-arm64.tar.gz",
+            "entrypoint": "bin/tool-nikku696969-learntube-processor-adb7bdym",
             "format": "tar.gz"
           },
           "darwin-x86_64": {
-            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-darwin-x86_64.tar.gz",
-            "entrypoint": "bin/tool-test-learntube-processor-12345678",
+            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.2/tool-nikku696969-learntube-processor-adb7bdym-darwin-x86_64.tar.gz",
+            "entrypoint": "bin/tool-nikku696969-learntube-processor-adb7bdym",
             "format": "tar.gz"
           },
           "linux-x86_64": {
-            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-linux-x86_64.tar.gz",
-            "entrypoint": "bin/tool-test-learntube-processor-12345678",
+            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.2/tool-nikku696969-learntube-processor-adb7bdym-linux-x86_64.tar.gz",
+            "entrypoint": "bin/tool-nikku696969-learntube-processor-adb7bdym",
             "format": "tar.gz"
           },
           "windows-x86_64": {
-            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.0/tool-test-learntube-processor-12345678-windows-x86_64.zip",
-            "entrypoint": "bin/tool-test-learntube-processor-12345678.exe",
+            "url": "https://github.com/imthegoodboy/learntube-ai-anna-app/releases/download/learntube-processor-v0.1.2/tool-nikku696969-learntube-processor-adb7bdym-windows-x86_64.zip",
+            "entrypoint": "bin/tool-nikku696969-learntube-processor-adb7bdym.exe",
             "format": "zip"
           }
         }
