@@ -310,7 +310,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: corepack enable
+      - name: Check Anna publish auth
+        run: |
+          if [ -z "$ANNA_APP_PAT" ]; then
+            echo "::error::Set repository secret ANNA_APP_PAT before using lifecycle=push or lifecycle=cut."
+            exit 1
+          fi
+          if [ -z "$ANNA_APP_HOST" ]; then
+            echo "ANNA_APP_HOST=https://anna.partners" >> "$GITHUB_ENV"
+          fi
 
       - name: Pin binary_urls → ${{ github.repository }} @ ${{ matrix.app.tag }}
         env:
@@ -345,20 +353,20 @@ jobs:
 
       - name: Install anna-app
         working-directory: examples/${{ matrix.app.app_dir }}
-        run: pnpm install
+        run: npm ci
 
       - name: Validate
         working-directory: examples/${{ matrix.app.app_dir }}
-        run: pnpm exec anna-app validate --strict
+        run: npm run validate
 
       - name: Push working draft
         if: ${{ github.event.inputs.lifecycle == 'push' || github.event.inputs.lifecycle == 'cut' }}
         working-directory: examples/${{ matrix.app.app_dir }}
         run: |
-          pnpm exec anna-app apps push --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+          npx anna-app apps push --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Cut version (freeze → R2 mirror)
         if: ${{ github.event.inputs.lifecycle == 'cut' }}
         working-directory: examples/${{ matrix.app.app_dir }}
         run: |
-          pnpm exec anna-app apps cut "${{ matrix.app.version }}" --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+          npx anna-app apps cut "${{ matrix.app.version }}" --json ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
