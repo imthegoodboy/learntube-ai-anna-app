@@ -1,5 +1,7 @@
 # LearnTube AI
 
+Demo video : https://youtu.be/ciF_u-fdelg
+
 LearnTube AI is an Anna App that turns YouTube learning sessions into a saved study workspace.
 
 Paste a video link or transcript and the app generates:
