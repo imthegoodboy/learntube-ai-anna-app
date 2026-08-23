@@ -26,10 +26,10 @@ anna-app dev --llm-account https://anna.partners
 
 ## Publish
 
-The checked-in Executa profile defaults to `local` for development. Build the four artifacts with `.github/workflows/build-executa.yml`, place them under `executas/my-first-anna-app/dist/`, and publish with the binary profile:
+Build the four native artifacts with `.github/workflows/build-executa.yml`. The checked-in Executa distribution uses the resulting public GitHub Release, so publish the complete app with the current Anna 101 command:
 
 ```powershell
-anna-app apps publish --profile binary
+anna-app apps publish --account https://anna.partners
 ```
 
-Install the uploaded version in Anna, verify both a Local Agent and Anna Cloud Agent, then submit the app for review from the Developer Console or with `anna-app apps submit-review learntube-ai`.
+Install the uploaded version in Anna, verify both a Local Agent and Anna Cloud Agent, then submit `learntube-study` for review from the Developer Console.
