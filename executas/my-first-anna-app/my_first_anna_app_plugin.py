@@ -24,14 +24,14 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
-TOOL_ID = "tool-dev-learntube-transcript"
+TOOL_ID = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
 TOOL_METHOD = "youtube.transcript"
 MAX_TRANSCRIPT_CHARS = 180_000
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 MANIFEST = {
     "name": TOOL_ID,
-    "version": "1.0.1",
+    "version": "1.0.2",
     "tools": [
         {
             "name": TOOL_METHOD,

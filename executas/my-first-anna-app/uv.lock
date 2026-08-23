@@ -208,8 +208,8 @@ wheels = [
 ]
 
 [[package]]
-name = "tool-dev-learntube-transcript"
-version = "1.0.1"
+name = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
+version = "1.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "youtube-transcript-api" },

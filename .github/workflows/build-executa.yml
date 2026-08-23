@@ -6,7 +6,7 @@ on:
       release_tag:
         description: GitHub Release tag for these binaries
         required: true
-        default: learntube-study-transcript-v1.0.1
+        default: learntube-study-transcript-v1.0.2
   push:
     tags:
       - "learntube-study-transcript-v*"
@@ -46,28 +46,32 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install . pyinstaller==6.15.0
       - name: Build executable
-        run: python -m PyInstaller --clean --onefile --name learntube-transcript my_first_anna_app_plugin.py
+        run: python -m PyInstaller --clean --onefile --name tool-nikku696969-learntube-study-transcript-ujzngt7x my_first_anna_app_plugin.py
       - name: Package Unix artifact
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          archive="learntube-transcript-1.0.1-${{ matrix.target }}.tar.gz"
-          tar -czf "dist/$archive" -C dist learntube-transcript
+          archive="tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.2-${{ matrix.target }}.tar.gz"
+          mkdir -p package/bin
+          cp dist/tool-nikku696969-learntube-study-transcript-ujzngt7x package/bin/
+          tar -czf "dist/$archive" -C package bin/tool-nikku696969-learntube-study-transcript-ujzngt7x
           (cd dist && shasum -a 256 "$archive" > "$archive.sha256")
       - name: Package Windows artifact
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "learntube-transcript-1.0.1-${{ matrix.target }}.zip"
-          Compress-Archive -LiteralPath dist/learntube-transcript.exe -DestinationPath "dist/$archive"
+          $archive = "tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.2-${{ matrix.target }}.zip"
+          New-Item -ItemType Directory -Force -Path package/bin | Out-Null
+          Copy-Item -LiteralPath dist/tool-nikku696969-learntube-study-transcript-ujzngt7x.exe -Destination package/bin/
+          Compress-Archive -Path package/bin -DestinationPath "dist/$archive"
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "dist/$archive").Hash.ToLowerInvariant()
           "$hash  $archive" | Set-Content -LiteralPath "dist/$archive.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: learntube-transcript-1.0.1-${{ matrix.target }}
+          name: tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.2-${{ matrix.target }}
           path: |
-            executas/my-first-anna-app/dist/learntube-transcript-1.0.1-${{ matrix.target }}.${{ matrix.archive }}
-            executas/my-first-anna-app/dist/learntube-transcript-1.0.1-${{ matrix.target }}.${{ matrix.archive }}.sha256
+            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.2-${{ matrix.target }}.${{ matrix.archive }}
+            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.2-${{ matrix.target }}.${{ matrix.archive }}.sha256
           if-no-files-found: error
 
   release:
@@ -89,5 +93,5 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Study Transcript v1.0.1" --notes "Four-platform Anna Executa binaries and SHA-256 checksums for the app-specific transcript deployment." --repo "$GITHUB_REPOSITORY"
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Study Transcript v1.0.2" --notes "Four-platform Anna Executa binaries with the Agent-compatible package identity required for app-bundled deployment." --repo "$GITHUB_REPOSITORY"
           fi

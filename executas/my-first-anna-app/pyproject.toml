@@ -3,8 +3,8 @@ requires = ["setuptools>=78", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tool-dev-learntube-transcript"
-version = "1.0.1"
+name = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
+version = "1.0.2"
 description = "LearnTube AI Executa for retrieving public YouTube captions."
 requires-python = ">=3.10"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-"tool-dev-learntube-transcript" = "my_first_anna_app_plugin:main"
+"tool-nikku696969-learntube-study-transcript-ujzngt7x" = "my_first_anna_app_plugin:main"
 
 [tool.setuptools]
 py-modules = ["my_first_anna_app_plugin"]

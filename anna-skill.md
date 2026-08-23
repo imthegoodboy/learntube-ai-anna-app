@@ -220,27 +220,37 @@ Each Executa needs an `executa.json` describing identity, version, type, and dis
   "name": "Data Helper",
   "version": "1.0.0",
   "executa_type": "tool",
-  "tool_id": "tool-dev-data-helper",
+  "tool_id": "tool-<developer>-data-helper-<suffix>",
   "type": "python",
   "distribution": {
     "active": "binary",
     "profiles": {
-      "local": { "type": "local", "supports_protocol": true },
+      "local": {
+        "type": "local",
+        "package_name": "tool-<developer>-data-helper-<suffix>",
+        "executable_name": "tool-<developer>-data-helper-<suffix>",
+        "supports_protocol": true
+      },
       "binary": {
         "type": "binary",
-        "executable_name": "data-helper",
+        "package_name": "tool-<developer>-data-helper-<suffix>",
+        "executable_name": "tool-<developer>-data-helper-<suffix>",
         "supports_protocol": true,
         "binary_artifacts": {
-          "darwin-arm64": { "path": "dist/data-helper-1.0.0-darwin-arm64.tar.gz", "entrypoint": "data-helper", "format": "tar.gz" },
-          "darwin-x86_64": { "path": "dist/data-helper-1.0.0-darwin-x86_64.tar.gz", "entrypoint": "data-helper", "format": "tar.gz" },
-          "linux-x86_64": { "path": "dist/data-helper-1.0.0-linux-x86_64.tar.gz", "entrypoint": "data-helper", "format": "tar.gz" },
-          "windows-x86_64": { "path": "dist/data-helper-1.0.0-windows-x86_64.zip", "entrypoint": "data-helper.exe", "format": "zip" }
+          "darwin-arm64": { "path": "dist/tool-<developer>-data-helper-<suffix>-1.0.0-darwin-arm64.tar.gz", "entrypoint": "bin/tool-<developer>-data-helper-<suffix>", "format": "tar.gz" },
+          "darwin-x86_64": { "path": "dist/tool-<developer>-data-helper-<suffix>-1.0.0-darwin-x86_64.tar.gz", "entrypoint": "bin/tool-<developer>-data-helper-<suffix>", "format": "tar.gz" },
+          "linux-x86_64": { "path": "dist/tool-<developer>-data-helper-<suffix>-1.0.0-linux-x86_64.tar.gz", "entrypoint": "bin/tool-<developer>-data-helper-<suffix>", "format": "tar.gz" },
+          "windows-x86_64": { "path": "dist/tool-<developer>-data-helper-<suffix>-1.0.0-windows-x86_64.zip", "entrypoint": "bin/tool-<developer>-data-helper-<suffix>.exe", "format": "zip" }
         }
       }
     }
   }
 }
 ```
+
+After Anna mints the immutable production tool ID, use that exact ID consistently in `executa.json`, the local and binary `package_name` and `executable_name` fields, the protocol `describe.name`, the Python/package script name, and each packaged binary entrypoint. Keep `bundled:<handle>` in the app manifest; the production ID belongs in the Executa package identity and generated sidecar, not as a replacement for the bundled handle.
+
+Do not omit `package_name`. A binary row can register and upload successfully while the Agent refuses to install it because `package_name` is null. The symptoms can be misleading: the app UI installs, `apps grants` reports the app-level permissions as satisfied but returns an empty `executa_grants` array, and runtime invocation says the tool is not deployed. Correct the package identity, bump the immutable Executa version, rebuild every native artifact with the matching entrypoint, raise the app dependency's `min_version`, cut a new app version, then reinstall and verify the exact Agent tool row.
 
 Test the plugin by itself before running the app:
 
@@ -551,7 +561,7 @@ Definition of done:
 - Developer page says “No working draft yet” after `apps publish`: verify the immutable version under Version history. This is expected for the guide's direct publish path.
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
-- `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify the installed app version, and inspect `apps grants`. If the new app has no Executa grant or resolves a legacy bundled tool, mint an app-specific Executa identity, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, and re-check the Agent deployment.
+- `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify `package_name` and `executable_name` both match the minted production tool ID, verify the installed app version, and inspect `apps grants`. If the new app has no Executa grant or resolves a legacy bundled tool, correct or mint the app-specific Executa identity, bump its immutable version, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, and re-check the Agent deployment.
 - A raw deployment error exposes a production tool ID to users: catch tool-invocation rejection and present a recovery message that suggests updating/reinstalling for the selected Agent or using the app's manual-input fallback.
 
 ## Controlling source
