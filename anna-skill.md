@@ -193,6 +193,7 @@ For model work:
 - request a documented JSON shape when the UI needs structured output;
 - parse fenced or plain JSON defensively;
 - validate and normalize every collection and scalar before rendering or storage;
+- treat a structurally valid response that omits a promised collection as incomplete; after the repair attempt, derive a small deterministic fallback only from the returned notes/objectives/source evidence so cards and quizzes do not become empty screens;
 - allow one repair retry for malformed JSON, then show a useful error;
 - cap source chunks, response tokens, and persisted source size;
 - never silently add facts to a source-grounded workflow.
@@ -210,7 +211,31 @@ Read [LLM and Agent](https://anna.partners/developers/apps/llm-and-agent), [LLM 
 
 ## 6. Implement an Executa only when needed
 
-An Executa is a line-oriented JSON stdio process. Keep stdout protocol-only and send diagnostics to stderr. It must support the current describe/health/invoke contract and return stable error envelopes rather than crashing.
+An Executa is a line-oriented JSON stdio process. Keep stdout protocol-only and send diagnostics to stderr. A production Agent negotiates the protocol before discovery, so a helper that only supports `describe`, `health`, and `invoke` can pass simple local checks yet fail after installation. Support this complete baseline:
+
+1. `initialize` — return the offered `1.1` or `2.0` protocol (fall back to `2.0`), `serverInfo`, and capability objects.
+2. `describe` — return the stable tool manifest. Use the Agent-compatible parameter-list shape (`[{"name":"value","type":"string","required":true}]`), not an unverified JSON-Schema object.
+3. `health` — return a ready/healthy state and the running version.
+4. `invoke` — return a stable `{success,data}` or `{success:false,error}` envelope.
+5. `shutdown` — acknowledge cleanly.
+6. Notifications such as `notifications/initialized` have no request ID and must not produce a response.
+
+A minimal initialization result is:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2.0",
+    "serverInfo": { "name": "Data Helper", "version": "1.0.0" },
+    "client_capabilities": {},
+    "capabilities": {}
+  }
+}
+```
+
+Test the ordered production handshake (`initialize` → notification → `describe` → `health` → `shutdown`) against the source process and every released Windows/Linux executable. A successful one-shot `describe` by itself is not sufficient.
 
 Each Executa needs an `executa.json` describing identity, version, type, and distribution. Keep local and binary profiles separate:
 
@@ -251,6 +276,18 @@ Each Executa needs an `executa.json` describing identity, version, type, and dis
 After Anna mints the immutable production tool ID, use that exact ID consistently in `executa.json`, the local and binary `package_name` and `executable_name` fields, the protocol `describe.name`, the Python/package script name, and each packaged binary entrypoint. Keep `bundled:<handle>` in the app manifest; the production ID belongs in the Executa package identity and generated sidecar, not as a replacement for the bundled handle.
 
 Do not omit `package_name`. A binary row can register and upload successfully while the Agent refuses to install it because `package_name` is null. The symptoms can be misleading: the app UI installs, `apps grants` reports the app-level permissions as satisfied but returns an empty `executa_grants` array, and runtime invocation says the tool is not deployed. Correct the package identity, bump the immutable Executa version, rebuild every native artifact with the matching entrypoint, raise the app dependency's `min_version`, cut a new app version, then reinstall and verify the exact Agent tool row.
+
+Agent installation and Agent loading are separate states. `is_installed: true` plus `install_status: success` is still broken when `agent_loaded` or `agent_running` is false. If Agent Details reports “Package installed but failed to load as Executa plugin” or starting the helper fails, compare the released binary with the full handshake above. After publishing the fixed immutable helper version, use the exact helper's Upgrade action in each Agent's details; do not run a broad “install all” action. Verify all of these on every selectable Agent:
+
+```text
+agent_loaded: true
+agent_running: true
+agent_version: <fixed-version>
+agent_tools_count: > 0
+install_error: null
+```
+
+Cloud and Local Agents have independent process state. A tool can be running on Cloud while still unloaded locally, so repair and test both rows separately.
 
 App versions freeze the Executa state that exists when the version is cut. If a helper must be independently deployable during pre-approval testing, run `anna-app executa publish --publish` only after validating its release/security scope and before cutting the app version. Flipping the Executa to public after an app version was already cut does not repair that frozen app dependency; bump and cut a new app patch version, pin it for review, reinstall it, and re-check `apps grants` plus a real invocation. Keep a helper `app_bundled` when independent public invocation is not appropriate and let the normal approved-app release anchor it instead.
 
@@ -437,7 +474,7 @@ Also run:
 anna-app apps grants <slug> --account https://anna.partners --json
 ```
 
-For an app with required bundled tools, `executa_grants` must contain the expected Executa and the overall grant should be satisfied. An empty `executa_grants` list is not healthy just because the app-level permissions are satisfied.
+For an app with required bundled tools, inspect `executa_grants`, but do not use it as the only deployment signal. Owner/developer self-installs were observed on 2026-08-23 to return an empty `executa_grants` list even while the signed app-window token contained `tools.required:<production-tool-id>` and the selected Agent reported the helper loaded/running. The authoritative test is the combination of: correct installed app version, correct required-tool scope, exact Agent tool row loaded/running at the required version, and a successful real `tools.invoke`. Conversely, `satisfied: true` with no running Agent process does not prove the helper works.
 
 Submit the tested version from its Anna Developer page or, when the authenticated CLI supports it, with the exact slug:
 
@@ -553,6 +590,7 @@ Definition of done:
 - Storage disappears: ensure keys are namespaced, writes are awaited, and the harness storage mode is understood.
 - Model returns malformed JSON: validate, make one JSON-only repair request, then fail visibly.
 - Executa corrupts protocol: keep stdout JSON-only and move logs to stderr.
+- Executa installs successfully but remains unloaded: run the released binary through `initialize` before `describe`. Implement `initialize`/`shutdown`, ignore no-ID notifications, return an Agent-compatible describe manifest, bump the immutable helper version, rebuild all platforms, publish it, then use the helper-specific Upgrade action on every Agent. Do not accept `is_installed: true` as success until `agent_loaded`, `agent_running`, `agent_version`, and `agent_tools_count` are correct.
 - Executa works locally but not in cloud: build the correct native Linux artifact and test archive entrypoint/permissions.
 - YouTube or another public service blocks cloud IPs: present an alternate user-provided input path; do not hide the service limitation.
 - `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key.
@@ -563,7 +601,7 @@ Definition of done:
 - Developer page says “No working draft yet” after `apps publish`: verify the immutable version under Version history. This is expected for the guide's direct publish path.
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
-- `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify `package_name` and `executable_name` both match the minted production tool ID, verify the installed app version, and inspect `apps grants`. If the new app has no Executa grant or resolves a legacy bundled tool, correct or mint the app-specific Executa identity, bump its immutable version, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, and re-check the Agent deployment.
+- `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify `package_name` and `executable_name` both match the minted production tool ID, verify the installed app version, and inspect `apps grants`. Then distinguish installation from loading: a successful install with `agent_loaded: false` usually means the production handshake or describe manifest was rejected. If the app resolves a legacy bundled tool, correct or mint the app-specific Executa identity; if the Agent rejects the process, add the complete initialization contract. In either case, bump the immutable helper version, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, upgrade the exact helper on each Agent, and confirm a real invocation.
 - A raw deployment error exposes a production tool ID to users: catch tool-invocation rejection and present a recovery message that suggests updating/reinstalling for the selected Agent or using the app's manual-input fallback.
 
 ## Controlling source
