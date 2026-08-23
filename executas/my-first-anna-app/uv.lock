@@ -209,7 +209,7 @@ wheels = [
 
 [[package]]
 name = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
-version = "1.0.2"
+version = "1.0.3"
 source = { editable = "." }
 dependencies = [
     { name = "youtube-transcript-api" },

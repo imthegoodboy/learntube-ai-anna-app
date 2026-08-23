@@ -6,6 +6,41 @@ from unittest.mock import patch
 import my_first_anna_app_plugin as plugin
 
 
+def test_production_agent_handshake() -> None:
+    initialized = plugin.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2.0"},
+        }
+    )
+    assert initialized == {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2.0",
+            "serverInfo": {"name": "LearnTube Study Transcript", "version": "1.0.3"},
+            "client_capabilities": {},
+            "capabilities": {},
+        },
+    }
+    assert plugin.handle_request({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+    assert plugin.handle_request({"jsonrpc": "2.0", "id": 2, "method": "shutdown"}) == {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {"ok": True},
+    }
+
+
+def test_describe_uses_agent_manifest_parameter_shape() -> None:
+    described = plugin.handle_request({"jsonrpc": "2.0", "id": 3, "method": "describe"})
+    manifest = described["result"]
+    assert manifest["display_name"] == "LearnTube Study Transcript"
+    assert isinstance(manifest["tools"][0]["parameters"], list)
+    assert manifest["tools"][0]["parameters"][0]["name"] == "url"
+
+
 def test_extract_video_id_supported_shapes() -> None:
     video_id = "UF8uR6Z6KLc"
     assert plugin.extract_video_id(f"https://www.youtube.com/watch?v={video_id}") == video_id

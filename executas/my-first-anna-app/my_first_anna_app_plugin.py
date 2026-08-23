@@ -31,7 +31,13 @@ YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 MANIFEST = {
     "name": TOOL_ID,
-    "version": "1.0.2",
+    "display_name": "LearnTube Study Transcript",
+    "version": "1.0.3",
+    "description": (
+        "Retrieves public YouTube captions and metadata for source-grounded "
+        "LearnTube AI lessons."
+    ),
+    "author": "LearnTube AI",
     "tools": [
         {
             "name": TOOL_METHOD,
@@ -39,19 +45,22 @@ MANIFEST = {
                 "Retrieve timestamped captions and public metadata for a YouTube "
                 "video so LearnTube can build a source-grounded study workspace."
             ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "YouTube video URL or 11-character ID."},
-                    "languages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Preferred caption language codes, in order.",
-                    },
+            "parameters": [
+                {
+                    "name": "url",
+                    "type": "string",
+                    "description": "YouTube video URL or 11-character ID.",
+                    "required": True,
                 },
-                "required": ["url"],
-                "additionalProperties": False,
-            },
+                {
+                    "name": "languages",
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Preferred caption language codes, in order.",
+                    "required": False,
+                    "default": ["en"],
+                },
+            ],
         }
     ],
 }
@@ -201,31 +210,66 @@ def invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:
     return {"success": False, "error": f"unknown method: {method}"}
 
 
+def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
+    """Handle one Executa JSON-RPC message.
+
+    Production Anna Agents negotiate the protocol with ``initialize`` before
+    requesting ``describe``. Notifications do not receive a response.
+    """
+
+    rpc_method = request.get("method")
+    request_id = request.get("id")
+    params = request.get("params") or {}
+
+    if rpc_method == "initialize":
+        offered_protocol = str(params.get("protocolVersion") or "1.1")
+        protocol_version = offered_protocol if offered_protocol in {"1.1", "2.0"} else "2.0"
+        result = {
+            "protocolVersion": protocol_version,
+            "serverInfo": {"name": MANIFEST["display_name"], "version": MANIFEST["version"]},
+            "client_capabilities": {},
+            "capabilities": {},
+        }
+    elif rpc_method == "describe":
+        result = MANIFEST
+    elif rpc_method == "health":
+        result = {"status": "healthy", "version": MANIFEST["version"]}
+    elif rpc_method == "invoke":
+        result = invoke(str(params.get("tool") or ""), params.get("arguments") or {})
+    elif rpc_method == "shutdown":
+        result = {"ok": True}
+    else:
+        if request_id is None:
+            return None
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": -32601, "message": f"Method not found: {rpc_method}"},
+        }
+
+    if request_id is None:
+        return None
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
 def main() -> None:
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
-        request: dict[str, Any] = {}
         try:
             request = json.loads(line)
-            rpc_method = request.get("method")
-            if rpc_method == "describe":
-                result = MANIFEST
-            elif rpc_method == "health":
-                result = {"status": "ready"}
-            elif rpc_method == "invoke":
-                params = request.get("params") or {}
-                result = invoke(str(params.get("tool") or ""), params.get("arguments") or {})
-            else:
-                raise ValueError(f"unknown rpc: {rpc_method}")
-            response = {"jsonrpc": "2.0", "id": request.get("id"), "result": result}
-        except Exception as exc:  # noqa: BLE001 - keep stdout protocol valid
+            if not isinstance(request, dict):
+                raise TypeError("request must be a JSON object")
+            response = handle_request(request)
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
             response = {
                 "jsonrpc": "2.0",
-                "id": request.get("id"),
-                "error": {"code": -32601, "message": str(exc)},
+                "id": None,
+                "error": {"code": -32700, "message": f"Parse error: {exc}"},
             }
+        if response is None:
+            continue
         sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 

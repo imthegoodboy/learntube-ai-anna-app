@@ -10,7 +10,7 @@
   "required_executas": [
     {
       "tool_id": "bundled:youtube-transcript",
-      "min_version": "1.0.2",
+      "min_version": "1.0.3",
       "version": "latest"
     }
   ],
