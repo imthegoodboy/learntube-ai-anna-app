@@ -252,6 +252,8 @@ After Anna mints the immutable production tool ID, use that exact ID consistentl
 
 Do not omit `package_name`. A binary row can register and upload successfully while the Agent refuses to install it because `package_name` is null. The symptoms can be misleading: the app UI installs, `apps grants` reports the app-level permissions as satisfied but returns an empty `executa_grants` array, and runtime invocation says the tool is not deployed. Correct the package identity, bump the immutable Executa version, rebuild every native artifact with the matching entrypoint, raise the app dependency's `min_version`, cut a new app version, then reinstall and verify the exact Agent tool row.
 
+App versions freeze the Executa state that exists when the version is cut. If a helper must be independently deployable during pre-approval testing, run `anna-app executa publish --publish` only after validating its release/security scope and before cutting the app version. Flipping the Executa to public after an app version was already cut does not repair that frozen app dependency; bump and cut a new app patch version, pin it for review, reinstall it, and re-check `apps grants` plus a real invocation. Keep a helper `app_bundled` when independent public invocation is not appropriate and let the normal approved-app release anchor it instead.
+
 Test the plugin by itself before running the app:
 
 ```bash
