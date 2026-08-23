@@ -40,6 +40,14 @@ Never assume that a familiar display name identifies the intended app. Two Anna 
 
 If an agent accidentally uploads to a legacy app, stop all release actions on that record. Do not delete, archive, cancel its review, or overwrite more versions without explicit user authorization. Correct the local slug, create the intended separate app, and report the legacy record separately.
 
+Treat bundled Executa identity with the same care. Reusing an ignored `.anna/executa.json` or root `.anna/executas.lock.json` from a legacy app can make the new UI resolve to the legacy app's bundled tool. The UI may install while `apps grants <new-slug> --json` shows an empty `executa_grants` array, and invocation then fails with “Executa is not deployed on the selected agent.” For a genuinely separate app-bundled backend:
+
+1. Give the Executa a new intentional slug.
+2. Preserve the app's `.anna/app.json`, because it identifies the correct app.
+3. Clear only the Executa identity cache with `anna-app executa cache-clear --cwd executas/<name>` and preserve/remove the stale root Executa lock before reminting.
+4. Push or publish once and verify that `bundle/anna-tool-ids.js` contains a newly minted tool ID.
+5. Verify the new tool with `anna-app executa status <tool-id> --json` and verify the app with `anna-app apps grants <app-slug> --json` after installation.
+
 Do not copy credentials, PATs, signed dev URLs, storage tokens, or user data into logs, source control, fixtures, or screenshots.
 
 ## 2. Choose the correct architecture
@@ -321,6 +329,14 @@ For a reproducible public binary release, use a GitHub Actions matrix and a GitH
 
 Anna hosts the static UI bundle. GitHub Release assets are for reproducible native Executa distribution; a separate website host is not required for the app UI.
 
+Before creating the immutable Executa version, verify the platform upload plan:
+
+```bash
+anna-app executa upload-binaries --dir executas/<executa> --dry-run --account https://anna.partners --json
+```
+
+Each platform should report `exists` when the exact asset is already on Anna's CDN or `upload` when it still needs uploading. Do not infer deployment readiness merely from a GitHub Release.
+
 ## 10. Preflight and upload
 
 The current Build on Anna 101 Chapter 7.6 lifecycle uploads the App, UI bundle, bundled Executa, four native archives, and creates an immutable version in one command:
@@ -376,6 +392,8 @@ Before review, the expected fields are `status: "draft"`, `is_published: false`,
 
 The same owned Executa identity can resolve to the same production `tool_id` when bundled by more than one app. A separate app slug therefore does not automatically create a separate Executa. If the backend must also be independent, give the Executa its own intentional slug and release identity.
 
+Executa versions are immutable. If binary URLs or binary content are added after an Executa version was already created, a later cut can fail with `Version ... already published with different content (changed: binary_urls)`. Do not rename old archives or try to mutate that version. Bump the Executa version consistently in `executa.json`, the Python/package metadata, the protocol manifest, artifact filenames, and the build workflow; rebuild all four native artifacts; verify checksums; then create the corrected app version. The guide's atomic `apps publish` path is a safe recovery when it uploads the Executa binaries and immutable app version together. If the current guide uses working drafts, follow its exact binary-before-cut ordering and do not mix in manual uploads after freezing.
+
 If an owned app is archived, inspect status first and explicitly restore it:
 
 ```bash
@@ -400,6 +418,14 @@ Listing fields are app-level and shared by all versions. The manifest does not c
 Then open the Anna Developer page, install the uploaded version, and use it end to end in Anna. Confirm both the Local Agent and Anna Cloud Agent/Linux workflow before review.
 
 When duplicate display names exist, confirm the installed record from its Permissions dialog: it must show the intended slug and version. Also confirm that every declared permission is granted. An installation toast such as `Installed "My App" (v1.0.0)` plus an Installed Apps entry for `<intended-slug> · v1.0.0` verifies the selected package, not just the display name.
+
+Also run:
+
+```bash
+anna-app apps grants <slug> --account https://anna.partners --json
+```
+
+For an app with required bundled tools, `executa_grants` must contain the expected Executa and the overall grant should be satisfied. An empty `executa_grants` list is not healthy just because the app-level permissions are satisfied.
 
 Submit the tested version from its Anna Developer page or, when the authenticated CLI supports it, with the exact slug:
 
@@ -525,6 +551,8 @@ Definition of done:
 - Developer page says “No working draft yet” after `apps publish`: verify the immutable version under Version history. This is expected for the guide's direct publish path.
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
+- `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify the installed app version, and inspect `apps grants`. If the new app has no Executa grant or resolves a legacy bundled tool, mint an app-specific Executa identity, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, and re-check the Agent deployment.
+- A raw deployment error exposes a production tool ID to users: catch tool-invocation rejection and present a recovery message that suggests updating/reinstalling for the selected Agent or using the app's manual-input fallback.
 
 ## Controlling source
 
