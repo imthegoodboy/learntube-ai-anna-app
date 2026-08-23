@@ -45,7 +45,7 @@ jobs:
       - name: Package Unix artifact
         if: runner.os != 'Windows'
         shell: bash
-        run: tar -C dist -czf "learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz" learntube-transcript
+        run: tar -czf "dist/learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz" -C dist learntube-transcript
       - name: Package Windows artifact
         if: runner.os == 'Windows'
         shell: pwsh
