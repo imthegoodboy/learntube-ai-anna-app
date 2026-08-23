@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.7` production experience from 2026-08-23: duplicate app names, new Executa identity creation, four-platform binary delivery, a production Agent handshake failure, app/tool version freezing, install-versus-load diagnostics, exact-video testing, generated-content fallbacks, Mentor/chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.7` production experience from 2026-08-23, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, a production Agent handshake failure, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1162,6 +1162,98 @@ Anna version 1.0.0 uploaded and installed
 Anna review candidate 1.0.0 submitted
 ```
 
+## Decision Room AI 1.0.0: live LLM budgets and deterministic continuity
+
+Decision Room AI was built as a separate UI-only app at
+`C:\Users\parth\Desktop\anna-decision-room-ai`. It uses `anna.llm.complete`,
+Anna Storage, deterministic scoring/sensitivity logic, and no Executa.
+
+### Lesson 1 — a successful LLM RPC can still contain no visible answer
+
+The live Qwen provider completed an `llm.complete` call successfully, consumed
+the entire `2200`-token output budget, and returned:
+
+```json
+{
+  "content": { "type": "text", "text": "" },
+  "stopReason": "endTurn",
+  "usage": { "outputTokens": 2202 }
+}
+```
+
+This was not a Host API transport failure. The reasoning model exhausted the
+budget before emitting visible content. The same structured request succeeded
+after the primary analysis budget was raised to `4200` tokens; Coach uses
+`2600`, and JSON repair uses `3200`.
+
+Production rules:
+
+1. Treat empty `content.text` as failure even when RPC status is success.
+2. For reasoning-capable hosted models, leave enough budget for hidden reasoning
+   plus the visible structured result.
+3. Do not retry indefinitely. One bounded repair request is enough.
+4. Add a deterministic fallback derived only from saved user inputs.
+5. Label fallback output as `Local fallback`; never present it as Anna output.
+6. Keep a separate live-provider Playwright gate in addition to fixtures.
+
+Decision Room's live gate starts the current harness with:
+
+```powershell
+anna-app dev --port 5197 --llm-account https://anna.partners
+```
+
+It creates a real room, runs structured Challenger analysis, verifies the result
+is labeled `Anna`, asks the Coach, rejects raw JSON/local-fallback output, and
+fails on page/console errors.
+
+### Lesson 2 — deterministic fallbacks should preserve the workflow
+
+When the hosted model is unavailable or empty, do not leave the user on a dead
+loading/error screen. Decision Room derives a bounded fallback from the current
+scores, evidence coverage, sensitivity, assumptions, and risks. It saves the
+fallback in history with `source: "local"` and clearly identifies it in the UI.
+
+Coach fallback responses use the current question to choose an assumption,
+reversibility, bias, missing-option, or evidence-coverage lens. They retain the
+user's message and append a transparent local response. They never invent
+research, collaborators, or external facts.
+
+### Lesson 3 — modal event boundaries must include portal roots
+
+The action sheet was rendered in `#modal-root`, a sibling of `#app`, while the
+delegated click listener was attached only to `#app`. The sheet looked correct,
+but Duplicate, Export, and Delete never executed. Attach delegated actions at
+`document` level or give every portal root its own handler. Test the actual
+postcondition—new stored room, downloaded artifact, or deletion—not only that a
+button is visible.
+
+### Lesson 4 — Windows `doctor` can misreport POSIX mode after ACL repair
+
+On Windows, `anna-app doctor` can keep reporting `dev.key mode 666 (expected
+0600)` because Node exposes POSIX-like mode bits even after the file is correctly
+restricted with NTFS ACLs. Verify the real ACL and the harness handshake:
+
+```powershell
+whoami
+icacls C:\Users\parth\.anna-app\dev.key
+```
+
+The final ACL should name only the actual user with `(R,W)`. Remove accidental
+machine/principal entries explicitly, then prove `anna-app dev` can create a
+session. Do not weaken the ACL merely to make the POSIX-style doctor line green.
+
+### Decision Room verification gate
+
+```text
+11 deterministic unit tests passed
+5 Anna-harness Playwright workflows passed
+1 real Anna LLM analysis + Coach workflow passed
+axe accessibility scans passed
+desktop and 390px visual captures reviewed
+strict Anna validation passed with CLI 0.1.49 / schema 0.19.0
+no Executa, external origin, provider key, or hardcoded generated content
+```
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
@@ -1177,6 +1269,7 @@ Anna review candidate 1.0.0 submitted
 - App works standalone but not in Anna: inspect the harness RPC log, iframe console, CSP, and SDK handshake.
 - Storage disappears: ensure keys are namespaced, writes are awaited, and the harness storage mode is understood.
 - Model returns malformed JSON: validate, make one JSON-only repair request, then fail visibly.
+- LLM RPC succeeds but `content.text` is empty while output usage equals the token budget: the reasoning model likely exhausted the budget before visible output. Raise the bounded budget, keep one repair attempt, and use a clearly labeled deterministic fallback if visible content is still empty.
 - Mock LLM returns the generation JSON in chat: inspect the RPC log. In CLI `0.1.49`, `contentIncludes` cannot reliably distinguish object-array `messages`; use scenario-specific fixtures rather than changing production prompts to fit the mock bug.
 - Narrow-browser screenshot still shows desktop layout: read the harness-reported iframe size. Test with a temporary manifest whose view `default_size` is actually narrow; shrinking only the outer browser is insufficient.
 - New route opens halfway down the page: reset `window.scrollTo({top: 0})` after route render, then move focus without scrolling.
@@ -1185,7 +1278,7 @@ Anna review candidate 1.0.0 submitted
 - Executa installs successfully but remains unloaded: run the released binary through `initialize` before `describe`. Implement `initialize`/`shutdown`, ignore no-ID notifications, return an Agent-compatible describe manifest, bump the immutable helper version, rebuild all platforms, publish it, then use the helper-specific Upgrade action on every Agent. Do not accept `is_installed: true` as success until `agent_loaded`, `agent_running`, `agent_version`, and `agent_tools_count` are correct.
 - Executa works locally but not in cloud: build the correct native Linux artifact and test archive entrypoint/permissions.
 - YouTube or another public service blocks cloud IPs: present an alternate user-provided input path; do not hide the service limitation.
-- `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key.
+- `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key. On Windows, `doctor` may still print mode `666`; trust the explicit `icacls` principal list plus a successful harness session, not the emulated POSIX bit alone.
 - App cannot publish: inspect status, version uniqueness, listing preflight, bundle readiness, Executa catalogue resolution, and account selection.
 - `anna-app whoami --account ...` says unknown option: CLI `0.1.49` uses `anna-app whoami` or `anna-app whoami --json`; use `--account` on app/executa lifecycle commands that document it.
 - Windows `Start-Process` says `%1 is not a valid Win32 application` for `anna-app`: `Get-Command anna-app` may resolve to `anna-app.ps1`. Launch `pwsh.exe -NoProfile -File <anna-app.ps1> ...` with `-WindowStyle Hidden`, or run it normally in a terminal. Track the listener PID separately from the wrapper PID.
@@ -1215,4 +1308,4 @@ Anna review candidate 1.0.0 submitted
 - [Game-Icons project](https://game-icons.net/)
 - [Game-Icons source and license](https://github.com/game-icons/icons)
 
-Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed on 2026-08-23. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
+Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-24. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
