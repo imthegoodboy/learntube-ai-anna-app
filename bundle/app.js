@@ -47,6 +47,7 @@ const state = {
   captureMode: "youtube",
   cardFlipped: false,
   quiz: null,
+  mentorPendingLessonId: null,
   generating: false,
   cancelRequested: false,
   toastTimer: null,
@@ -459,25 +460,70 @@ function renderRoadmap(lesson) {
 
 function renderMentor(lesson) {
   const messages = lesson.progress?.mentor || [];
-  const chat = messages.length
-    ? messages.map((message) => `<li class="chat-message" data-role="${escapeHtml(message.role)}"><strong>${message.role === "user" ? "You" : "Lesson mentor"}</strong><p>${escapeHtml(message.text)}</p></li>`).join("")
-    : `<li class="chat-message"><strong>Lesson mentor</strong><p>Ask anything about this lesson. I will answer only from its source and say when the evidence is missing.</p></li>`;
-  const suggestions = lesson.suggestedQuestions.map((question) => `<button type="button" data-action="suggest-question" data-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("");
+  const isPending = state.mentorPendingLessonId === lesson.id;
+  const chat = messages.map((message) => {
+    const isUser = message.role === "user";
+    const timestamp = formatChatTime(message.createdAt);
+    return `<li class="chat-message" data-role="${isUser ? "user" : "assistant"}">
+      <span class="chat-avatar" aria-hidden="true">${isUser ? "Y" : "LT"}</span>
+      <div class="chat-body">
+        <div class="chat-meta"><strong>${isUser ? "You" : "Lesson mentor"}</strong>${timestamp ? `<time datetime="${escapeHtml(message.createdAt)}">${escapeHtml(timestamp)}</time>` : ""}</div>
+        <p>${escapeHtml(message.text)}</p>
+      </div>
+    </li>`;
+  }).join("");
+  const pendingMessage = isPending ? `<li class="chat-message chat-message-pending" data-role="assistant" role="status">
+    <span class="chat-avatar" aria-hidden="true">LT</span>
+    <div class="chat-body"><div class="chat-meta"><strong>Lesson mentor</strong><span>Reading the source</span></div><div class="thinking-dots" aria-label="Preparing an answer"><i></i><i></i><i></i></div></div>
+  </li>` : "";
+  const suggestions = lesson.suggestedQuestions.slice(0, 4).map((question, index) => `<button type="button" data-action="suggest-question" data-question="${escapeHtml(question)}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(question)}</strong><i aria-hidden="true">↗</i></button>`).join("");
+  const sourceType = lesson.sourceType === "youtube" ? "YouTube captions" : "Pasted transcript";
   return `<div class="mentor-grid">
-    <div>
-      <ul class="chat-list" id="chat-list">${chat}</ul>
-      <form id="mentor-form">
-        <label class="field-label" for="mentor-question">Ask about ${escapeHtml(clampText(lesson.title, 55))}</label>
-        <div class="suggested-questions">${suggestions}</div>
-        <textarea class="mentor-input" id="mentor-question" name="question" placeholder="What did the speaker mean by…?"></textarea>
-        <div class="button-row"><button class="primary-button" type="submit">Ask the lesson</button><span class="muted">Answers stay inside the current evidence.</span></div>
+    <section class="mentor-conversation" aria-label="Lesson mentor conversation">
+      ${messages.length ? `<ul class="chat-list" id="chat-list" role="log" aria-live="polite" aria-relevant="additions">${chat}${pendingMessage}</ul>` : `<div class="mentor-welcome">
+        <span class="mentor-welcome-mark" aria-hidden="true">✦</span>
+        <div><p class="section-label">READY WHEN YOU ARE</p><h2>Start with the part that still feels fuzzy.</h2><p>I’ll answer from this lesson’s transcript and notes. If the source does not cover something, I’ll tell you plainly.</p></div>
+      </div>${pendingMessage ? `<ul class="chat-list" id="chat-list" role="log" aria-live="polite">${pendingMessage}</ul>` : ""}`}
+      ${suggestions && !messages.length ? `<section class="mentor-prompts" aria-labelledby="prompt-heading"><div><p class="section-label">QUICK STARTS</p><h2 id="prompt-heading">Questions worth asking</h2></div><div class="suggested-questions">${suggestions}</div></section>` : ""}
+      <form class="mentor-composer" id="mentor-form">
+        <div class="composer-heading"><label for="mentor-question">Ask about this lesson</label><span id="mentor-count">0 / 1,200</span></div>
+        <textarea class="mentor-input" id="mentor-question" name="question" rows="3" maxlength="1200" placeholder="Ask for an explanation, example, comparison, or recap…" aria-describedby="mentor-help" required ${isPending ? "disabled" : ""}></textarea>
+        <div class="composer-actions"><p id="mentor-help"><span class="grounded-dot" aria-hidden="true"></span> Source-grounded answer <span aria-hidden="true">·</span> <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd></p><button class="primary-button mentor-send" type="submit" ${isPending ? "disabled" : ""}><span>${isPending ? "Thinking…" : "Ask mentor"}</span><i aria-hidden="true">→</i></button></div>
       </form>
-    </div>
-    <aside class="proof-note">
-      <strong>Grounding rule</strong>
-      <ol><li>Use the lesson source.</li><li>Connect back to the notes.</li><li>Say “not covered” when needed.</li></ol>
+    </section>
+    <aside class="mentor-context" aria-label="Current lesson context">
+      <p class="section-label">CURRENT SOURCE</p>
+      <h2>${escapeHtml(lesson.title)}</h2>
+      <p class="mentor-source-type">${escapeHtml(sourceType)}${lesson.sourceLanguage ? ` · ${escapeHtml(lesson.sourceLanguage)}` : ""}</p>
+      <p class="mentor-summary">${escapeHtml(clampText(lesson.summary, 220))}</p>
+      <dl class="mentor-stats">
+        <div><dt>Key ideas</dt><dd>${lesson.keyIdeas.length}</dd></div>
+        <div><dt>Recall cards</dt><dd>${lesson.flashcards.length}</dd></div>
+        <div><dt>Quiz prompts</dt><dd>${lesson.quiz.length}</dd></div>
+      </dl>
+      <a class="text-button mentor-notes-link" href="#/notes">Review lesson notes →</a>
+      <div class="grounding-note"><span aria-hidden="true">◎</span><div><strong>Evidence boundary</strong><p>Answers use only this lesson’s source and generated notes—never unrelated web knowledge.</p></div></div>
     </aside>
   </div>`;
+}
+
+function formatChatTime(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function resizeMentorInput(input) {
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+}
+
+function scrollMentorToEnd() {
+  requestAnimationFrame(() => {
+    const lastMessage = document.querySelector("#chat-list .chat-message:last-child");
+    lastMessage?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
 }
 
 function renderLibrary() {
@@ -702,12 +748,12 @@ async function toggleAction(index, checked) {
 async function askMentor(form) {
   const lesson = activeLesson();
   const question = String(new FormData(form).get("question") || "").trim();
-  if (!question) return;
+  if (!question || state.mentorPendingLessonId) return;
   const messages = lesson.progress.mentor || (lesson.progress.mentor = []);
   messages.push({ role: "user", text: question, createdAt: new Date().toISOString() });
+  state.mentorPendingLessonId = lesson.id;
   render();
-  const input = document.getElementById("mentor-question");
-  if (input) input.disabled = true;
+  scrollMentorToEnd();
   try {
     const evidence = lesson.sourceText.slice(0, MAX_MENTOR_EVIDENCE);
     const answer = await complete({
@@ -717,12 +763,22 @@ async function askMentor(form) {
       temperature: 0.2,
     });
     messages.push({ role: "assistant", text: answer, createdAt: new Date().toISOString() });
+    state.mentorPendingLessonId = null;
     state.profile = touchStudyDay({ ...state.profile, xp: (state.profile.xp || 0) + 6 });
     await Promise.all([saveLesson(lesson), saveProfile()]);
     render();
+    scrollMentorToEnd();
   } catch (error) {
     messages.pop();
+    state.mentorPendingLessonId = null;
     render();
+    const input = document.getElementById("mentor-question");
+    if (input) {
+      input.value = question;
+      resizeMentorInput(input);
+      const count = document.getElementById("mentor-count");
+      if (count) count.textContent = `${question.length.toLocaleString()} / 1,200`;
+    }
     showToast(error?.message || "The mentor could not answer right now.", 6000);
   }
 }
@@ -770,6 +826,9 @@ page.addEventListener("click", async (event) => {
     const input = document.getElementById("mentor-question");
     if (input) {
       input.value = target.dataset.question;
+      resizeMentorInput(input);
+      const count = document.getElementById("mentor-count");
+      if (count) count.textContent = `${input.value.length.toLocaleString()} / 1,200`;
       input.focus();
     }
   } else if (action === "open-lesson") {
@@ -797,6 +856,17 @@ page.addEventListener("input", (event) => {
     const list = document.getElementById("library-list");
     if (list) list.innerHTML = filtered.length ? libraryRows(filtered) : '<li class="empty-page"><p>No lesson matches that search.</p></li>';
   }
+  if (event.target.id === "mentor-question") {
+    resizeMentorInput(event.target);
+    const count = document.getElementById("mentor-count");
+    if (count) count.textContent = `${event.target.value.length.toLocaleString()} / 1,200`;
+  }
+});
+
+page.addEventListener("keydown", (event) => {
+  if (event.target.id !== "mentor-question" || event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  if (!state.mentorPendingLessonId) event.target.form?.requestSubmit();
 });
 
 page.addEventListener("submit", async (event) => {
@@ -824,6 +894,7 @@ document.getElementById("cancel-generation").addEventListener("click", () => {
 
 window.addEventListener("hashchange", () => {
   render();
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   document.getElementById("workspace").focus({ preventScroll: true });
 });
 
