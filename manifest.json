@@ -39,7 +39,7 @@
       }
     ],
     "host_api": {
-      "tools": ["required:*"],
+      "tools": ["required:bundled:youtube-transcript"],
       "llm": ["complete"],
       "storage": ["get", "set", "delete", "list"],
       "window": ["set_title", "ready"]

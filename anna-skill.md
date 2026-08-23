@@ -5,12 +5,12 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 # Anna App Builder
 
-Use this skill when an agent must create or change an Anna App end to end. It is a practical companion to the official documentation, not a replacement for checking the current schema and CLI. Anna is evolving quickly; begin every project by checking the linked sources and the installed CLI version.
+Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle.
 
 ## 1. Start with current sources
 
-1. Open [Anna](https://anna.partners/) and [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228/1) in a browser.
-2. Read [Anna's LLM-readable documentation index](https://anna.partners/llms.txt). Use it to find the newest page for each feature.
+1. Open and completely read [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) in a browser.
+2. Follow its sequence: Local Agent → environment → login → scaffold → implementation → bundled-handle audit → native binaries → `anna-app apps publish` → install/test → Developer page review → Developer page release.
 3. Check the current CLI and environment:
 
    ```bash
@@ -108,7 +108,7 @@ In `manifest.json`, refer to a bundled dependency as `bundled:<handle>`. The UI 
       }
     ],
     "host_api": {
-      "tools": ["required:*"],
+      "tools": ["required:bundled:data-helper"],
       "llm": ["complete"],
       "storage": ["get", "set", "delete", "list"],
       "window": ["set_title", "ready"]
@@ -197,7 +197,7 @@ Each Executa needs an `executa.json` describing identity, version, type, and dis
   "tool_id": "tool-dev-data-helper",
   "type": "python",
   "distribution": {
-    "active": "local",
+        "active": "binary",
     "profiles": {
       "local": { "type": "local", "supports_protocol": true },
       "binary": {
@@ -294,16 +294,15 @@ For each archive:
 
 ## 10. Preflight and publish
 
-The current recommended lifecycle separates a mutable working draft from an immutable version:
+The current Build on Anna 101 lifecycle uploads the App, UI bundle, bundled Executa, four native archives, and creates an immutable version in one command:
 
 ```bash
 anna-app validate --strict
-anna-app apps push --dry-run --profile binary --account https://anna.partners
-anna-app apps push --profile binary --account https://anna.partners
-anna-app apps cut 1.0.0 --changelog "Initial production release" --account https://anna.partners
+anna-app apps publish --dry-run --account https://anna.partners
+anna-app apps publish --account https://anna.partners
 ```
 
-`apps publish` remains available as a combined compatibility flow. Prefer `push` plus `cut` when the installed CLI and current docs support it. Use `--profile local` only for local developer shims; use `--profile binary` for a distributable app.
+Set `distribution.active` to `binary` for the formal release. Do not manually replace the bundled handle, the production tool ID, or the generated `anna-tool-ids.js` mapping; `apps publish` performs those associations.
 
 Before push/cut:
 
@@ -336,23 +335,13 @@ Listing fields are app-level and shared by all versions. The manifest does not c
 - optional cover and up to six screenshots;
 - homepage, support, and privacy URLs when applicable.
 
-Then install the developer version and use it end to end in Anna. Confirm both local-agent and cloud/Linux behavior for bundled binaries. The review preflight requires a valid version, a finalized `bundle_ready` schema-2 UI, truthful listing assets, and self-testing.
+Then open the Anna Developer page, install the uploaded version, and use it end to end in Anna. Confirm both the Local Agent and Anna Cloud Agent/Linux workflow before review.
 
-Submit only when ready:
-
-```bash
-anna-app apps submit-review <slug> --account https://anna.partners
-```
-
-Admin review is server-side and has no guaranteed SLA. Status moves through `DRAFT`, `PENDING_REVIEW`, `APPROVED`, and `PUBLISHED` (or `REJECTED`); `ARCHIVED` hides the listing while existing installations keep working. After approval, publish the version through the Console or:
-
-```bash
-anna-app apps release 1.0.0 --slug <slug> --account https://anna.partners
-```
+Submit the tested version from its Anna Developer page. After Anna approves that exact version, return to the Developer page and release it there. Every new public version repeats review and release.
 
 Never claim the marketplace release is live while it is awaiting admin approval. Report the exact remote status and version.
 
-Read [Listing Fields](https://anna.partners/developers/apps/app-listing) and [Publishing an App](https://anna.partners/developers/apps/app-publish) immediately before submission because this lifecycle can change.
+Re-read Chapters 7.6–8.3 of [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) immediately before submission because this lifecycle can change.
 
 ## 12. Release verification and maintenance
 
@@ -381,22 +370,8 @@ After release:
 - `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key.
 - App cannot publish: inspect status, version uniqueness, listing preflight, bundle readiness, Executa catalogue resolution, and account selection.
 
-## Primary sources
+## Controlling source
 
-- [Anna](https://anna.partners/)
-- [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228/1)
-- [Documentation index](https://anna.partners/llms.txt)
-- [App Manifest](https://anna.partners/developers/apps/app-manifest)
-- [Bundling Executas](https://anna.partners/developers/apps/app-bundling)
-- [UI Manifest](https://anna.partners/developers/apps/app-ui-manifest)
-- [UI SDK](https://anna.partners/developers/apps/app-ui-sdk)
-- [UI Host API](https://anna.partners/developers/apps/app-ui-host-api)
-- [Host API vs Executa](https://anna.partners/developers/apps/host-api-vs-executa)
-- [Local Development](https://anna.partners/developers/apps/local-dev)
-- [Local LLM Development](https://anna.partners/developers/apps/local-dev-llm)
-- [Testing the Bundle](https://anna.partners/developers/apps/testing-bundle)
-- [Listing Fields](https://anna.partners/developers/apps/app-listing)
-- [Publishing an App](https://anna.partners/developers/apps/app-publish)
-- [Official Anna Executa examples](https://github.com/whtcjdtc2007/anna-executa-examples)
+- [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228)
 
-Last verified against Anna CLI `0.1.49` and official docs available on 2026-08-23. Re-run discovery and strict validation on every future build.
+Last verified against the 14-edit forum guide visible on 2026-08-23. Reread the guide and re-run strict validation on every future build.

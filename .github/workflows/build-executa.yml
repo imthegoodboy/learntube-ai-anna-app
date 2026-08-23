@@ -2,12 +2,17 @@ name: Build LearnTube Executa
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub Release tag for these binaries
+        required: true
+        default: learntube-transcript-v1.0.0
   push:
     tags:
       - "learntube-transcript-v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -45,13 +50,44 @@ jobs:
       - name: Package Unix artifact
         if: runner.os != 'Windows'
         shell: bash
-        run: tar -czf "dist/learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz" -C dist learntube-transcript
+        run: |
+          archive="learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz"
+          tar -czf "dist/$archive" -C dist learntube-transcript
+          (cd dist && shasum -a 256 "$archive" > "$archive.sha256")
       - name: Package Windows artifact
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -LiteralPath dist/learntube-transcript.exe -DestinationPath "dist/learntube-transcript-1.0.0-${{ matrix.target }}.zip"
+        run: |
+          $archive = "learntube-transcript-1.0.0-${{ matrix.target }}.zip"
+          Compress-Archive -LiteralPath dist/learntube-transcript.exe -DestinationPath "dist/$archive"
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "dist/$archive").Hash.ToLowerInvariant()
+          "$hash  $archive" | Set-Content -LiteralPath "dist/$archive.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: learntube-transcript-1.0.0-${{ matrix.target }}
-          path: executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}
+          path: |
+            executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}
+            executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}.sha256
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release assets
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create or update release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          tag="${REQUESTED_TAG:-$GITHUB_REF_NAME}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Transcript v1.0.0" --notes "Four-platform Anna Executa binaries and SHA-256 checksums." --repo "$GITHUB_REPOSITORY"
+          fi
