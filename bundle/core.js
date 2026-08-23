@@ -70,7 +70,7 @@ export function normalizeLesson(raw, source, now = new Date()) {
   const title = cleanText(safe.title, cleanText(source.title, "Untitled lesson"));
   const summary = cleanText(safe.summary);
   const objectives = cleanStringArray(safe.objectives, 6);
-  const keyIdeas = cleanObjectArray(
+  let keyIdeas = cleanObjectArray(
     safe.keyIdeas,
     (item) => {
       if (!item || typeof item !== "object") return null;
@@ -88,7 +88,20 @@ export function normalizeLesson(raw, source, now = new Date()) {
     7,
   );
 
-  const flashcards = cleanObjectArray(
+  if (!keyIdeas.length) {
+    const ideaSeeds = objectives.length
+      ? objectives
+      : summary.split(/(?<=[.!?])\s+/).map((item) => cleanText(item)).filter(Boolean);
+    keyIdeas = ideaSeeds.slice(0, 6).map((text) => ({
+      heading: cleanText(text.split(/\s+/).slice(0, 8).join(" ").replace(/[.,;:!?]+$/, ""), "Key idea"),
+      explanation: text,
+      example: "",
+      watchOut: "",
+      evidenceQuote: "",
+    }));
+  }
+
+  let flashcards = cleanObjectArray(
     safe.flashcards,
     (item, index) => {
       if (!item || typeof item !== "object") return null;
@@ -105,7 +118,16 @@ export function normalizeLesson(raw, source, now = new Date()) {
     14,
   );
 
-  const quiz = cleanObjectArray(
+  if (!flashcards.length) {
+    flashcards = keyIdeas.slice(0, 10).map((idea, index) => ({
+      id: `card-${index + 1}`,
+      front: `Explain: ${idea.heading}`,
+      back: idea.explanation,
+      concept: idea.heading,
+    }));
+  }
+
+  let quiz = cleanObjectArray(
     safe.quiz,
     (item, index) => {
       if (!item || typeof item !== "object") return null;
@@ -127,6 +149,25 @@ export function normalizeLesson(raw, source, now = new Date()) {
     },
     10,
   );
+
+  if (!quiz.length) {
+    const answers = [...new Set(flashcards.map((card) => card.back).filter(Boolean))];
+    quiz = flashcards.slice(0, 6).map((card, index) => {
+      const distractors = answers.filter((answer) => answer !== card.back).slice(0, 3);
+      const options = [card.back, ...distractors];
+      if (options.length < 2) options.push("This point is not supported by the lesson.");
+      const answerIndex = index % options.length;
+      options.splice(answerIndex, 0, options.shift());
+      return {
+        id: `question-${index + 1}`,
+        question: `Which answer best explains “${card.concept}”?`,
+        options,
+        answerIndex,
+        explanation: card.back,
+        concept: card.concept,
+      };
+    });
+  }
 
   const actions = cleanObjectArray(
     safe.actions,

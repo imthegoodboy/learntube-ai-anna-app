@@ -45,6 +45,35 @@ test("normalizeLesson validates generated collections and initializes progress",
   assert.equal(lesson.roadmap[0].minutes, 20);
 });
 
+test("normalizeLesson derives source-grounded practice when the model omits collections", () => {
+  const objectives = [
+    "Differentiate breadth-first and depth-first traversal.",
+    "Match breadth-first search with a queue.",
+    "Match depth-first search with a stack.",
+  ];
+  const lesson = normalizeLesson(
+    {
+      title: "Graph traversal",
+      summary: "Breadth-first and depth-first search traverse a graph in different orders.",
+      objectives,
+      keyIdeas: [],
+      flashcards: [],
+      quiz: [],
+    },
+    { type: "youtube", text: "Caption evidence", title: "Graph traversal" },
+    new Date("2026-08-23T00:00:00.000Z"),
+  );
+
+  assert.equal(lesson.keyIdeas.length, 3);
+  assert.equal(lesson.flashcards.length, 3);
+  assert.equal(lesson.quiz.length, 3);
+  assert.deepEqual(lesson.flashcards.map((card) => card.back), objectives);
+  for (const question of lesson.quiz) {
+    assert.equal(question.options[question.answerIndex], question.explanation);
+    assert.ok(objectives.includes(question.explanation));
+  }
+});
+
 test("scheduleCard spaces easy recalls and keeps hard cards close", () => {
   const now = new Date("2026-08-23T10:00:00.000Z");
   const first = scheduleCard(null, "easy", now);
