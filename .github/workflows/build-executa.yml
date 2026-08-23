@@ -6,10 +6,10 @@ on:
       release_tag:
         description: GitHub Release tag for these binaries
         required: true
-        default: learntube-transcript-v1.0.0
+        default: learntube-study-transcript-v1.0.1
   push:
     tags:
-      - "learntube-transcript-v*"
+      - "learntube-study-transcript-v*"
 
 permissions:
   contents: write
@@ -51,23 +51,23 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          archive="learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz"
+          archive="learntube-transcript-1.0.1-${{ matrix.target }}.tar.gz"
           tar -czf "dist/$archive" -C dist learntube-transcript
           (cd dist && shasum -a 256 "$archive" > "$archive.sha256")
       - name: Package Windows artifact
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "learntube-transcript-1.0.0-${{ matrix.target }}.zip"
+          $archive = "learntube-transcript-1.0.1-${{ matrix.target }}.zip"
           Compress-Archive -LiteralPath dist/learntube-transcript.exe -DestinationPath "dist/$archive"
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "dist/$archive").Hash.ToLowerInvariant()
           "$hash  $archive" | Set-Content -LiteralPath "dist/$archive.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: learntube-transcript-1.0.0-${{ matrix.target }}
+          name: learntube-transcript-1.0.1-${{ matrix.target }}
           path: |
-            executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}
-            executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}.sha256
+            executas/my-first-anna-app/dist/learntube-transcript-1.0.1-${{ matrix.target }}.${{ matrix.archive }}
+            executas/my-first-anna-app/dist/learntube-transcript-1.0.1-${{ matrix.target }}.${{ matrix.archive }}.sha256
           if-no-files-found: error
 
   release:
@@ -89,5 +89,5 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Transcript v1.0.0" --notes "Four-platform Anna Executa binaries and SHA-256 checksums." --repo "$GITHUB_REPOSITORY"
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Study Transcript v1.0.1" --notes "Four-platform Anna Executa binaries and SHA-256 checksums for the app-specific transcript deployment." --repo "$GITHUB_REPOSITORY"
           fi

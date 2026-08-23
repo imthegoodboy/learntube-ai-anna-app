@@ -31,7 +31,7 @@ YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 MANIFEST = {
     "name": TOOL_ID,
-    "version": "1.0.0",
+    "version": "1.0.1",
     "tools": [
         {
             "name": TOOL_METHOD,

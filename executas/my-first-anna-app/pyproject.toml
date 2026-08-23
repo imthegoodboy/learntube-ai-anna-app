@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tool-dev-learntube-transcript"
-version = "1.0.0"
+version = "1.0.1"
 description = "LearnTube AI Executa for retrieving public YouTube captions."
 requires-python = ">=3.10"
 dependencies = [
