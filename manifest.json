@@ -1,0 +1,57 @@
+{
+  "schema": 2,
+  "permissions": [
+    "tools.invoke",
+    "llm.complete",
+    "storage.read",
+    "storage.write"
+  ],
+  "host_capabilities": ["llm.complete", "aps.kv"],
+  "required_executas": [
+    {
+      "tool_id": "bundled:youtube-transcript",
+      "min_version": "1.0.0",
+      "version": "latest"
+    }
+  ],
+  "optional_executas": [],
+  "system_prompt_addendum": "LearnTube AI is a source-grounded study workspace. When the user mentions this app, help them turn a YouTube lesson or transcript into notes, recall practice, a quiz, a roadmap, and grounded mentor answers. Never claim the app analyzed a source unless the user completed generation in the app.",
+  "tags": ["education", "youtube", "study", "flashcards", "quiz", "notes"],
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": []
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "LearnTube AI",
+        "default": true,
+        "entry": "index.html",
+        "default_size": { "w": 1120, "h": 760 },
+        "min_size": { "w": 320, "h": 480 },
+        "max_size": { "w": 1600, "h": 1200 },
+        "resizable": true,
+        "movable": true,
+        "single_instance": true,
+        "summary_template": "Learning workspace for the active lesson"
+      }
+    ],
+    "host_api": {
+      "tools": ["required:*"],
+      "llm": ["complete"],
+      "storage": ["get", "set", "delete", "list"],
+      "window": ["set_title", "ready"]
+    },
+    "csp_overrides": {
+      "script-src": ["'self'"]
+    },
+    "state_merge": "last_writer_wins"
+  },
+  "dev": {
+    "fixtures": ["fixtures/*.jsonl"],
+    "seed_storage": {},
+    "user_id": 1
+  }
+}

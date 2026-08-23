@@ -1,0 +1,14 @@
+.anna/
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+executas/*/.venv/
+executas/*/build/
+executas/*/dist/
+executas/*/*.spec
+build/
+dist/
+*.spec
+*.log

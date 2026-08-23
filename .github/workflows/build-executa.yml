@@ -1,0 +1,57 @@
+name: Build LearnTube Executa
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "learntube-transcript-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: darwin-arm64
+            archive: tar.gz
+          - os: macos-15-intel
+            target: darwin-x86_64
+            archive: tar.gz
+          - os: ubuntu-22.04
+            target: linux-x86_64
+            archive: tar.gz
+          - os: windows-2022
+            target: windows-x86_64
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: executas/my-first-anna-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build dependencies
+        run: python -m pip install . pyinstaller==6.15.0
+      - name: Build executable
+        run: python -m PyInstaller --clean --onefile --name learntube-transcript my_first_anna_app_plugin.py
+      - name: Package Unix artifact
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tar -C dist -czf "learntube-transcript-1.0.0-${{ matrix.target }}.tar.gz" learntube-transcript
+      - name: Package Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -LiteralPath dist/learntube-transcript.exe -DestinationPath "dist/learntube-transcript-1.0.0-${{ matrix.target }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: learntube-transcript-1.0.0-${{ matrix.target }}
+          path: executas/my-first-anna-app/dist/learntube-transcript-1.0.0-${{ matrix.target }}.${{ matrix.archive }}
+          if-no-files-found: error

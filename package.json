@@ -1,0 +1,12 @@
+{
+  "name": "learntube-ai-anna-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "validate": "anna-app validate --strict",
+    "dev:mock": "anna-app dev --mock-llm fixtures/happy-path.jsonl",
+    "dev:real": "anna-app dev --llm-account https://anna.partners"
+  }
+}
