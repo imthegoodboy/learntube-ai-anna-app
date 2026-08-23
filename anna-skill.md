@@ -962,9 +962,215 @@ anna-app apps versions learntube-study --account https://anna.partners --json
 
 The source commit for the Mentor/navigation release was `8ddfd6f` (`Improve Mentor chat and workspace navigation`). The exact repository state was clean before handoff.
 
+## Gaming Arena 1.0.0: UI-only app, realtime rooms, and listing assets
+
+Gaming Arena was built as a completely separate app at
+`C:\Users\parth\Desktop\anna-gaming-arena`. Its source repository is
+https://github.com/imthegoodboy/anna-gaming-arena.
+
+Final identities and state on 2026-08-23:
+
+```text
+App slug:                   anna-gaming-arena
+Anna app id:                213
+Uploaded version:           1.0.0
+Anna version id:            567
+Uploaded content hash:      b86797ca965438ac75e09c94b16d02a8461636610ccf18dd33e6d5cea2776e21
+Realtime Worker:            anna-gaming-arena-live
+Realtime origin:            https://anna-gaming-arena-live.anna-gaming-arena.workers.dev
+Git commit after metadata:  8a59598
+Anna status:                pending_review
+Review candidate:           1.0.0
+Installed Apps version:     1.0.0
+Public App Store status:    not public until Anna approval and release
+```
+
+### Lesson 1 — an Anna UI app can intentionally have no Executa
+
+Gaming Arena uses deterministic browser game engines, Anna Storage, and an
+HTTPS/WebSocket room service. Its production manifest has:
+
+```json
+{
+  "required_executas": [],
+  "optional_executas": []
+}
+```
+
+This is valid and passed strict validation. It avoids the selected-Agent,
+native-binary, and tool-install failure class entirely. Do not add a dummy
+Executa merely because the scaffold generated one. Remove the generated
+Executa directory when the app does not need machine-local work.
+
+### Lesson 2 — Anna Storage is not a cross-user room database
+
+Anna Storage is namespaced to the current user/app. It is appropriate for
+profile settings, personal scores, and recent history, but two Anna users
+cannot use it as shared match state.
+
+Gaming Arena uses Cloudflare Durable Objects for:
+
+- one strongly ordered object per room
+- a global per-game matchmaking queue
+- a server-verified public leaderboard
+- WebSocket hibernation and reconnect-safe seats
+- a two-hour inactivity alarm
+
+The server imports the same game engines as the UI and rejects out-of-turn,
+stale, oversized, or illegal actions. Opponent-facing views remove unrevealed
+Battleship ships, Memory symbols, and Quiz answers.
+
+References:
+
+- https://developers.cloudflare.com/durable-objects/
+- https://developers.cloudflare.com/durable-objects/best-practices/websockets/
+- https://developers.cloudflare.com/workers/wrangler/
+
+### Lesson 3 — production external origins must be HTTPS
+
+`anna-app validate --strict` rejected this local development value:
+
+```text
+ui.bundle.external_origins must use an https:// prefix and contain no '*':
+http://127.0.0.1:8787
+```
+
+Keep local preview selection in `runtime-config.js`, but declare only the final
+production HTTPS origin in `manifest.json`. Before Anna publish, test the
+deployed origin directly:
+
+```powershell
+$env:ARENA_TEST_ORIGIN = "https://anna-gaming-arena-live.anna-gaming-arena.workers.dev"
+npm run test:server
+Remove-Item Env:ARENA_TEST_ORIGIN
+
+$env:ARENA_E2E_ORIGIN = "https://anna-gaming-arena-live.anna-gaming-arena.workers.dev"
+npx playwright test --grep "invite room"
+Remove-Item Env:ARENA_E2E_ORIGIN
+```
+
+The production test must cover both HTTPS and WSS; a successful Worker upload
+alone is insufficient.
+
+### Lesson 4 — the store category is a fixed enum
+
+`games` looked natural but Anna rejected the first upload:
+
+```text
+category must be one of the supported categories:
+productivity, developer-tools, creative, data, lifestyle, education,
+communication, entertainment, utilities
+```
+
+Gaming Arena uses `entertainment` and keeps `games`, `multiplayer`, `chess`,
+`puzzles`, and `quiz` as tags. Never guess a listing category; use the current
+enum returned by the CLI or Developer Console.
+
+### Lesson 5 — bundle visual assets locally and store attribution
+
+Gaming Arena vendors one SVG for each of sixteen games plus its controller
+logo. The source is https://game-icons.net/ and
+https://github.com/game-icons/icons. Imported artwork was recolored, square
+backgrounds were removed, and creator-by-creator attribution plus the upstream
+license ship in `ATTRIBUTION.md` and `src/assets/GAME-ICONS-LICENSE.txt`.
+
+Local assets avoid broken hotlinks, third-party request leakage, and new image
+CSP origins. The build script recursively copies `src/assets/` into `bundle/`.
+The app favicon, desktop/mobile brand, featured strip, catalog, rankings, and
+game-mode dialogs all use those files.
+
+### Lesson 6 — use `apps sync-meta` for logos and listing links
+
+The current CLI reads these optional `app.json` fields:
+
+```json
+{
+  "logo_file": "listing-assets/gaming-arena-logo.png",
+  "screenshots": ["listing-assets/desktop.png", "listing-assets/mobile.png"],
+  "cover_url": "https://...",
+  "homepage_url": "https://...",
+  "support_url": "https://...",
+  "privacy_url": "https://..."
+}
+```
+
+Preview and then upload without manually editing the Developer page:
+
+```powershell
+anna-app apps sync-meta --account https://anna.partners --dry-run --json
+anna-app apps sync-meta --account https://anna.partners --json
+```
+
+The CLI uploads local logo/screenshots to the Anna CDN and patches listing
+metadata. This also works when Chrome file upload is blocked because the ChatGPT
+browser extension lacks “Allow access to file URLs.” Gaming Arena's final logo
+URL was an Anna CDN `webp`, and the Developer card changed from a generic grid
+icon to the controller mark.
+
+### Lesson 7 — `apps publish` creates the immutable version, not a public release
+
+Current direct flow:
+
+```powershell
+anna-app validate --strict
+anna-app apps publish --account https://anna.partners --json
+anna-app apps status anna-gaming-arena --account https://anna.partners --json
+anna-app apps versions anna-gaming-arena --account https://anna.partners --json
+```
+
+Gaming Arena's first successful publish returned `first_publish: true`, version
+`1.0.0`, version id `567`, and `bundle_ready` with 22 files. Developer Console
+showed “No working draft yet” because the direct publish path created the
+immutable version without leaving an `apps push` draft. That is expected.
+
+The top-level Developer card displayed `v0.0.0` even while Version history and
+Installed Apps authoritatively showed `1.0.0`. Use `apps versions`, the Version
+details modal, and Installed Apps to verify the exact version; do not diagnose
+from the stale card label alone.
+
+### Lesson 8 — install, pin the candidate, and report public state truthfully
+
+The Developer **Install** action successfully installed draft version `1.0.0`.
+Installed Apps showed the exact version, logo, and tagline. Submission then used:
+
+```powershell
+anna-app apps submit-review anna-gaming-arena --account https://anna.partners --json
+```
+
+Final response:
+
+```text
+status: pending_review
+review_candidate_version: 1.0.0
+is_published: false
+```
+
+This means installed and under review, not visible in the public App Store.
+Only release after Anna approves this exact version.
+
+### Gaming Arena verification gate
+
+```text
+17 game-engine tests passed
+3 Durable Object integration tests passed
+5 Playwright workflows passed
+strict Anna validation passed
+production HTTPS/WSS room workflow passed
+GitHub source pushed
+Cloudflare Durable Object Worker deployed
+Anna version 1.0.0 uploaded and installed
+Anna review candidate 1.0.0 submitted
+```
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
+- `apps publish` rejects category `games`: use the current fixed taxonomy; for a game collection use `entertainment` and keep game concepts in tags.
+- Strict validation rejects a local realtime origin: `ui.bundle.external_origins` accepts HTTPS production origins, not `http://127.0.0.1`; keep local preview routing out of the production allowlist.
+- Cloudflare deploy warns that a workers.dev subdomain must be registered: inspect the account subdomain page, wait for DNS/TLS, and require a real `200` from the final HTTPS URL before wiring it into Anna. Do not assume upload output means the route is reachable.
+- The Developer app card says `v0.0.0` after publishing `1.0.0`: verify Version history, `apps versions`, and Installed Apps. The card label can be stale while the immutable and installed versions are correct.
+- Chrome cannot upload the listing logo (`fileChooser.setFiles` returns Not allowed): enable “Allow access to file URLs” for the ChatGPT browser extension, or preferably set `logo_file` and run `anna-app apps sync-meta` so the CLI uploads it to Anna CDN.
+- Online multiplayer was implemented with Anna Storage: redesign it. Anna Storage is per user/app; cross-user room state needs an authorized shared backend with server-side move validation.
 - Bundled handle is unresolved: ensure `app.json` contains the handle and the manifest uses `bundled:<same-handle>`.
 - UI invokes a dev tool in production: use the generated `window.__ANNA_TOOL_IDS__` map.
 - Runtime call is denied: align top-level `permissions`, `host_capabilities`, and `ui.host_api`, then let the user grant it.
@@ -1004,5 +1210,9 @@ The source commit for the Mentor/navigation release was `8ddfd6f` (`Improve Ment
 - [Chapter 8.2 — Release After Review](https://forum.anna.partners/t/build-on-anna-101/228#p-370-h-82-release-version-after-passing-review-41)
 - [Anna platform](https://anna.partners/)
 - [Anna Developer Console](https://anna.partners/developer)
+- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
+- [Cloudflare Workers Wrangler](https://developers.cloudflare.com/workers/wrangler/)
+- [Game-Icons project](https://game-icons.net/)
+- [Game-Icons source and license](https://github.com/game-icons/icons)
 
 Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed on 2026-08-23. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
