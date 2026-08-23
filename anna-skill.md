@@ -7,6 +7,8 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.7` production experience from 2026-08-23: duplicate app names, new Executa identity creation, four-platform binary delivery, a production Agent handshake failure, app/tool version freezing, install-versus-load diagnostics, exact-video testing, generated-content fallbacks, Mentor/chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+
 ## 1. Start with current sources
 
 1. Open and completely read [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) in a browser.
@@ -174,6 +176,59 @@ Never ship a production catalogue tool ID as a substitute for the generated mapp
 8. Do not hardcode generated user content. Test fixture data belongs under `fixtures/`, never in production state.
 9. Provide a bounded standalone fallback where useful, but clearly state when model, tool, or sync capabilities require Anna.
 
+### Chat and mentor UI contract
+
+A source-grounded chat is a workflow, not just a textarea followed by model text. Use this baseline:
+
+1. The empty state explains what the mentor can answer, which evidence it uses, and what happens when the lesson does not cover the question.
+2. Show the current source beside the conversation on wide screens and below it on narrow screens. Include the lesson title, source type, a short summary, and small counts such as key ideas, recall cards, or quiz prompts.
+3. Render each message with an explicit role, compact avatar/marker, timestamp when available, and a clear visual difference between learner and mentor.
+4. Render all user/model text as escaped text. Preserve useful line breaks and add `overflow-wrap: anywhere` so a long URL, JSON fragment, or unbroken token cannot create horizontal overflow.
+5. Suggested questions must come from the generated lesson data. Limit them, keep them keyboard-operable, and hide the onboarding prompt block after the conversation starts so it does not interrupt long chat history.
+6. Keep one pending request per conversation. Immediately append the learner's question, show a visible “reading the source” state, disable the composer and send button, and prevent double submission.
+7. Use an auto-growing textarea with a bounded height, a visible character limit, a useful placeholder, a normal submit button, and `Ctrl+Enter`/`Cmd+Enter` as an optional shortcut. Do not make the shortcut the only way to send.
+8. On failure, clear pending state, keep or restore the learner's question, re-enable the composer, and show an actionable retry message. Never leave a permanently disabled empty input.
+9. After adding a question or answer, scroll only enough to reveal the latest message. Respect reduced-motion preferences.
+10. Keep the evidence boundary visible: source-only answer, no invented citations, and an explicit “not covered” response when the evidence is absent.
+
+Useful interaction state:
+
+```js
+const state = {
+  mentorPendingLessonId: null,
+};
+
+function resizeMentorInput(input) {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+}
+
+page.addEventListener("keydown", (event) => {
+  if (event.target.id !== "mentor-question") return;
+  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  if (!state.mentorPendingLessonId) event.target.form?.requestSubmit();
+});
+```
+
+### Shared navigation and responsive behavior
+
+- Group navigation by user intent, for example `Workspace` for capture/library and `Study` for notes/cards/quiz/roadmap/mentor. Keep every destination on a separate route when the tasks are genuinely distinct.
+- Use an open layout with typography, whitespace, and dividers before adding panels. Avoid turning every section into a rounded card.
+- On narrow windows, change the fixed side rail into a reachable bottom navigation. Test every item at the manifest minimum width; seven compressed labels can become unreadable even when the layout technically fits.
+- Add bottom body padding equal to the mobile navigation height. Move fixed toasts above the navigation so success/error messages do not cover route controls.
+- Reset scroll position on route changes. Without this, opening Mentor from the bottom of a long Notes page can land halfway down the new page:
+
+  ```js
+  window.addEventListener("hashchange", () => {
+    render();
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.getElementById("workspace").focus({ preventScroll: true });
+  });
+  ```
+
+- Do not confuse the browser window width with the Anna app iframe width. The harness sizes the app from `ui.views[].default_size`; the responsive test procedure is in Section 8.
+
 Read [UI Manifest](https://anna.partners/developers/apps/app-ui-manifest), [UI SDK](https://anna.partners/developers/apps/app-ui-sdk), and [UI Host API](https://anna.partners/developers/apps/app-ui-host-api) before wiring runtime calls.
 
 ## 5. Connect to the runtime safely
@@ -322,13 +377,55 @@ anna-app dev --mock-llm fixtures/happy-path.jsonl
 
 The local harness uses the production dispatcher contract, an iframe, in-memory window state, and auto-discovered Executas. It prints an RPC log; verify the exact requested methods and storage keys.
 
-Mock caveat observed with CLI `0.1.49`: `llm.complete` matching may stringify a message array as `[object Object]`, causing `contentIncludes` rules to fall through to the first matching namespace/method fixture. Put the primary generation response first or run distinct fixtures for distinct scenarios. Re-check this behavior after CLI upgrades.
+### Mock-LLM matcher failure observed in CLI `0.1.49`
+
+The `anna-app dev --mock-llm` dispatcher was observed to build its match text with the equivalent of:
+
+```js
+String(args.args?.content ?? args.args?.messages ?? "")
+```
+
+For `anna.llm.complete`, `messages` is an array of objects, so this becomes `[object Object]`. A fixture such as:
+
+```json
+{"ns":"llm","method":"complete","match":{"contentIncludes":"LESSON NOTES"},"result":{}}
+```
+
+cannot match the actual prompt. When several entries have the same `ns` and `method`, the dispatcher falls back to the first one. In LearnTube this made lesson generation work, but the later Mentor call received the lesson-generation JSON instead of the configured conversational answer.
+
+Rules until a later CLI version is verified:
+
+1. Do not claim that `contentIncludes` successfully selected between multiple `llm.complete` fixtures merely because the RPC returned `200`/success.
+2. Inspect the harness RPC response and the rendered text. A raw lesson JSON object inside chat is a fixture-selection failure, not proof that the production mentor prompt is wrong.
+3. Use one scenario-specific LLM fixture per harness run when calls need different response shapes. Start separate harness processes for lesson-generation QA and Mentor-answer QA, or use a seeded lesson with a Mentor-only fixture.
+4. Do not reorder the two fixtures as a “fix”; that only changes which workflow receives the wrong response.
+5. Use real account-backed LLM testing only when the user authorized it and the quota/data impact is understood.
+6. Re-test the matcher after every CLI upgrade and remove this workaround only after the RPC log proves content-based selection works.
 
 For real account-backed development, first understand quota and data impact, then use the documented account flag. Do not use real billing merely to avoid writing fixtures.
 
 ## 8. Browser QA checklist
 
 Test inside the Anna harness, not only as a standalone page.
+
+The harness uses the selected view's `default_size` as the iframe viewport. Shrinking the outer Chrome/browser viewport is not a valid mobile test when the iframe still reports `1120×760`; it can merely create a horizontally clipped desktop canvas.
+
+For a real minimum-width check:
+
+1. Copy `manifest.json` to a temporary QA manifest.
+2. Change only the QA view's `default_size`, for example to `{ "w": 390, "h": 780 }`. Preserve the real minimum, maximum, host API, permissions, and Executa declarations.
+3. Run a second harness on a free port while explicitly passing the original bundle:
+
+   ```bash
+   anna-app dev --port 5191 --manifest manifest.qa-mobile.json --bundle bundle --mock-llm fixtures/happy-path.jsonl
+   ```
+
+4. Confirm the harness title bar says `390×780`, not the desktop size.
+5. Check the app document, not the outer harness, for overflow. The useful assertion is `document.documentElement.scrollWidth === document.documentElement.clientWidth`.
+6. Exercise fixed navigation, toasts, route changes, the composer, long messages, and the context rail at that size.
+7. Stop the exact QA server/listener and delete the temporary manifest after testing. Do not commit a one-off viewport manifest.
+
+When starting a harness in the background on Windows, launch it hidden and record the PID/port. Before cleanup, resolve the exact listeners for those QA ports; do not stop unrelated Node, Python, or PowerShell processes.
 
 For every route:
 
@@ -344,6 +441,10 @@ For every route:
 - storage writes happen after edits, reviews, answers, and progress changes.
 
 Exercise full flows: create, persist, reload, select, search, update, delete with confirmation, failure/retry, model output repair, tool failure, offline fallback, and export/download. Validate downloads by checking their binary header and terminator in an automated test when a browser harness cannot capture Blob downloads.
+
+Browser extensions can inject warnings and errors into otherwise clean local pages. Filter console results by URL before treating them as app failures. Messages from `chrome-extension://...` are not LearnTube/Anna bundle errors; errors from the app bundle, harness origin, or runtime SDK still require investigation.
+
+Hot reload can preserve the harness runtime state but replace the iframe document. Re-acquire frame/element handles after reload before continuing QA. Do not assume a stale automation locator proves the app stopped working.
 
 Use the harness recorder and fixture tools when useful. See [Local Development](https://anna.partners/developers/apps/local-dev), [Local LLM Development](https://anna.partners/developers/apps/local-dev-llm), and [Testing the Bundle](https://anna.partners/developers/apps/testing-bundle).
 
@@ -395,6 +496,25 @@ anna-app validate --strict
 anna-app apps publish --dry-run --account https://anna.partners
 anna-app apps publish --account https://anna.partners
 ```
+
+For a UI-only app patch after the required Executa is already published, immutable, installable, loaded, running, and unchanged, the CLI supports skipping a redundant helper publication:
+
+```bash
+anna-app apps publish \
+  --skip-executa-publish \
+  --account https://anna.partners \
+  --json
+```
+
+Use that flag only when all of these are true:
+
+- `executa.json`, its package metadata, binary URLs/checksums, and native archives did not change;
+- the manifest's bundled handle and `min_version` did not change;
+- the exact helper version is already available through Anna;
+- Local and Cloud Agents already report the helper loaded/running;
+- the app change is confined to the UI, listing, prompts, or app-side logic.
+
+Do not use it to hide an unbuilt helper change. After upload, record and verify `app_id`, slug, version, `version_id`, content hash, bundle status, file count, and total size from the JSON response.
 
 Set `distribution.active` to `binary` for the formal release. Do not manually replace the bundled handle, the production tool ID, or the generated `anna-tool-ids.js` mapping; `apps publish` performs those associations.
 
@@ -494,6 +614,42 @@ Do not stop at the success message. The status verification must show:
 
 Versions created after submission are not automatically part of that review round. Re-run `apps submit-review` to pin the newest intended version, then verify `review_candidate_version` again.
 
+### Update installation can stay on the previous review candidate
+
+This is especially important when an app is already `pending_review` and a newer immutable version is uploaded.
+
+Observed LearnTube sequence:
+
+```text
+before upload:
+  latest_version = 1.0.6
+  review_candidate_version = 1.0.6
+
+after apps publish 1.0.7:
+  latest_version = 1.0.7
+  review_candidate_version = 1.0.6
+  status = pending_review
+
+generic developer install at this point:
+  installed_version = 1.0.6
+```
+
+The upload did not fail. The generic developer install followed the pinned candidate. Supplying `1.0.7` in an undocumented install request body was also observed to leave the installation on `1.0.6`; do not rely on private endpoint parameters to select a version.
+
+For an already-under-review app update:
+
+1. Upload the new immutable version.
+2. Run `apps status` and compare `latest_version.version` with `review_candidate_version`.
+3. Prefer a version-specific **Install & test** action in the current Developer UI if it is available.
+4. If the generic install can only install the pinned candidate, re-run `apps submit-review <slug>` with authorization to pin the new version.
+5. Verify `review_candidate_version` now equals the intended version.
+6. Install again and verify the installation response or Installed Apps Permissions page reports the exact version.
+7. Run `apps grants` and the real critical workflow before treating the version as tested.
+
+CLI `0.1.49` has no public `apps install` subcommand. Use the current Developer UI for installation rather than scripting undocumented endpoints in a reusable workflow. An automated/private install used during debugging must never print the stored PAT and must still be verified with the exact installed version.
+
+An install response can contain `installed_executas: []` while an unchanged helper remains installed and running from an earlier app version. Combine that response with the exact Agent tool row and a real invocation; do not infer success or failure from that array alone.
+
 After Anna approves that exact version, return to the Developer page and release it using the current guide's approved-version action. Every new public version repeats install, testing, review, approval, and release.
 
 Never claim the marketplace release is live while it is awaiting admin approval. Report the exact remote status and version.
@@ -534,6 +690,9 @@ anna-app validate --strict
 anna-app apps publish --dry-run --account https://anna.partners
 anna-app apps publish --account https://anna.partners
 
+# For a verified UI-only patch with an unchanged published helper:
+# anna-app apps publish --skip-executa-publish --account https://anna.partners --json
+
 # 4. Confirm the remote version before installing anything
 anna-app apps status <slug> --account https://anna.partners --json
 ```
@@ -555,7 +714,7 @@ Then complete these manual/platform checks in order:
 1. Open [Anna Developer Console](https://anna.partners/developer) and select the app by slug, not display name.
 2. Verify listing text, unique logo, homepage, support, privacy URL, and optional screenshots.
 3. Open Versions and verify `<version>`, `bundle_ready`, the resolved required Executa, and the resolved `ui.host_api.tools` ACL.
-4. With user authorization, install that version.
+4. With user authorization, install that version. If the app is already under review, first compare latest and candidate; a generic install may select the previous candidate.
 5. In Installed Apps → Permissions, verify `<slug> · <version>` and all declared grants.
 6. Run the critical workflow on a Local Agent and on Anna Cloud Agent/Linux when supported.
 7. With user authorization, submit and verify the pinned candidate:
@@ -563,6 +722,7 @@ Then complete these manual/platform checks in order:
    ```bash
    anna-app apps submit-review <slug> --account https://anna.partners
    anna-app apps status <slug> --account https://anna.partners --json
+   anna-app apps grants <slug> --account https://anna.partners --json
    ```
 
 8. Stop while status is `pending_review`; this is uploaded and under review, not public.
@@ -580,6 +740,228 @@ Definition of done:
 - `review_candidate_version` is exact;
 - after approval, the Marketplace lists the exact released version and a clean-account install succeeds.
 
+## 14. LearnTube AI worked example and failure ledger
+
+This case study is evidence, not a template identity. Never copy its production IDs into another app.
+
+### Final verified identities on 2026-08-23
+
+```text
+Intended app name:            LearnTube AI
+Intended app slug:            learntube-study
+Anna app_id:                  208
+Latest uploaded app version:  1.0.7
+Latest version_id:            566
+Installed version:            1.0.7
+Review candidate:             1.0.7
+Remote status:                pending_review
+Marketplace public:           no
+
+Bundled handle:               bundled:youtube-transcript
+Generated handle key:         youtube-transcript
+Production Executa ID:        tool-nikku696969-learntube-study-transcript-ujzngt7x
+Required/helper version:      1.0.3
+Local Agent state:            loaded and running
+Cloud Agent state:            loaded and running
+```
+
+Source and binary build repository:
+
+- https://github.com/imthegoodboy/learntube-ai-anna-app
+- release branch: `learntube-release-1.0.0`
+- four-platform successful build: https://github.com/imthegoodboy/learntube-ai-anna-app/actions/runs/32643109893
+
+The user also owned an older, unrelated LearnTube app with the same display name but slug `learntube-ai`. Its similar name was never authority to overwrite it. The new project was kept on `learntube-study` / `app_id 208`.
+
+### Failure 1 — duplicate display name pointed at the wrong app
+
+**Symptom:** Developer/Installed Apps showed more than one “LearnTube AI”, including an older application with different metadata and version history.
+
+**Cause:** Anna allows duplicate display names. The old app and new project were separate records.
+
+**Fix:** Use `learntube-study` and `app_id 208` as the identity gate. Keep `.anna/app.json`; verify status before every upload. Do not edit/delete the old `learntube-ai` record.
+
+**Proof:** Every later `apps status`, publish response, version row, install, and grants response reported slug `learntube-study` and `app_id 208`.
+
+### Failure 2 — app resolved a helper that was not deployed
+
+**Symptom:** Runtime error similar to:
+
+```text
+executa 'tool-nikku696969-learntube-transcript-mybqe3kq' is not deployed on the selected agent
+```
+
+**Cause:** The app/helper identity came from a legacy or stale Executa mapping. The selected Agent did not have that exact production tool.
+
+**Fix:** Give the new helper an intentional new identity, clear only its stale Executa cache/lock, keep `bundled:youtube-transcript` in the manifest, publish once, and verify `bundle/anna-tool-ids.js` resolves to the newly minted LearnTube Study helper.
+
+**Proof:** The final mapping and Agent row used `tool-nikku696969-learntube-study-transcript-ujzngt7x`.
+
+### Failure 3 — UI exposed a raw deployment/tool ID error
+
+**Symptom:** Learners saw infrastructure wording and a production tool ID instead of a recovery path.
+
+**Cause:** `anna.tools.invoke` rejection was displayed directly.
+
+**Fix:** Normalize known deployment errors into a user message that says the transcript helper is not ready for the selected Agent, suggests update/reinstall, and offers **Paste transcript** as a working fallback. Keep the technical error in diagnostics, not user copy.
+
+**Proof:** Unit tests cover the redaction/recovery message, and the manual-input path remains usable without the helper.
+
+### Failure 4 — binary metadata could install incorrectly when `package_name` was absent
+
+**Symptom:** Tool metadata existed, but Agent install/upgrade paths could fail or report an invalid `package_name` type.
+
+**Cause:** A binary distribution declared an executable/binary URL without a stable string `package_name`.
+
+**Fix:** Set both `package_name` and `executable_name` to the immutable production tool ID in the active local/binary profiles. Keep entrypoint names consistent in every archive.
+
+**Proof:** The final helper installed as version `1.0.3` on both Agents with no install error.
+
+### Failure 5 — a source helper was not sufficient for real users
+
+**Symptom:** Local Python execution could work, but users on other Agent platforms would need source dependencies or have no executable.
+
+**Cause:** Local/source distribution is not a cross-platform release.
+
+**Fix:** Build native artifacts on macOS ARM, macOS Intel, Linux x86_64, and Windows x86_64. Verify archive entrypoints and SHA-256 values, create a public immutable GitHub Release, then publish/upload them through Anna.
+
+**Proof:** The four-platform CI run completed successfully and the Agent installed the native helper.
+
+### Failure 6 — helper installed but production Agent could not load it
+
+**Symptom:** The app installed; Agent details could show package installation success, but the helper was unloaded/not running and the UI still said it was unavailable.
+
+**Cause:** The process supported simple local `describe`/`health`/`invoke`, but production Agent first sent `initialize`, followed by `notifications/initialized`, and later `shutdown`. The old helper rejected or mishandled that handshake. Its `describe` parameter shape also had to match Agent expectations.
+
+**Fix:** Implement the complete handshake, return no response to no-ID notifications, use a parameter-list tool manifest, bump the immutable helper to `1.0.3`, rebuild all four native artifacts, publish, and upgrade that exact helper on each Agent.
+
+**Proof:** Both Local and Cloud rows reported:
+
+```text
+agent_loaded: true
+agent_running: true
+agent_version: 1.0.3
+agent_tools_count: 1
+install_error: null
+```
+
+Six Python tests include the ordered production handshake and tool behavior.
+
+### Failure 7 — changing a published helper without a new version was impossible
+
+**Symptom:** Corrected binary URLs/content could not replace an already-created immutable helper version; app cuts could freeze the old snapshot.
+
+**Cause:** Executa and app versions are immutable. Later visibility/binary changes do not retroactively repair an earlier frozen dependency.
+
+**Fix:** Bump the helper, package metadata, protocol version, archive names, checksums, and app `min_version` together. Publish the corrected helper before the new app version, then reinstall/upgrade.
+
+**Proof:** App versions from `1.0.6` onward require helper `1.0.3`, the first version with the verified production handshake.
+
+### Failure 8 — metadata looked healthy but only a real invocation proved captions worked
+
+**Symptom:** Catalogue, install, and Agent rows could all look correct while the original user workflow remained untested.
+
+**Fix:** Run the exact requested video through the installed production app:
+
+```text
+https://youtu.be/vf-cxgUXcMk?si=inAYZAmIUL4eNYEb
+```
+
+**Proof:** The helper returned `403` caption segments and LearnTube generated a saved source-grounded lesson. Keep **Paste transcript** because caption availability and cloud-IP behavior remain external constraints.
+
+### Failure 9 — valid model JSON could still leave Cards or Quiz empty
+
+**Symptom:** The model returned a parseable lesson object but omitted flashcards or quiz questions, producing empty feature pages.
+
+**Cause:** JSON validity is not product completeness.
+
+**Fix:** Normalize every collection. After one repair attempt, derive a small deterministic set of flashcards and quiz questions only from returned key ideas/objectives/summary. Never add outside facts.
+
+**Proof:** A unit test passes a lesson with missing practice collections and verifies populated, source-grounded fallbacks.
+
+### Failure 10 — mock Mentor returned the lesson-generation JSON
+
+**Symptom:** Clicking a suggested Mentor question submitted correctly, but chat rendered the full lesson JSON.
+
+**Cause:** CLI `0.1.49` mock matching stringified the messages array as `[object Object]`; `contentIncludes: "LESSON NOTES"` never matched, so the first `llm.complete` fixture won.
+
+**Fix:** Use scenario-specific fixtures/separate harness runs and inspect RPC responses. Do not rewrite production chat logic merely to compensate for the local dispatcher bug.
+
+**Proof:** The keyboard/send/persistence UI path worked; the RPC log showed the wrong canned fixture was selected before the response reached app code.
+
+### Failure 11 — desktop-only browser resizing did not test the mobile app
+
+**Symptom:** A narrow Chrome screenshot showed a clipped `1120×760` desktop app rather than the mobile breakpoint.
+
+**Cause:** The Anna harness iframe width came from the manifest's desktop `default_size`, independent of the outer browser viewport.
+
+**Fix:** Run a temporary second manifest at `390×780`. Verify the harness-reported size and compare the app document's `scrollWidth` and `clientWidth`.
+
+**Proof:** At a measured `375 px` app content width, LearnTube had `scrollWidth === clientWidth`, all seven navigation destinations remained present, and the Mentor composer was visible.
+
+### Failure 12 — route changes preserved the previous page's scroll position
+
+**Symptom:** Opening Mentor from low on the Notes page landed in the middle of Mentor, hiding its introduction and context.
+
+**Cause:** Hash navigation rerendered content but intentionally focused the workspace with `preventScroll`, leaving the old document scroll offset untouched.
+
+**Fix:** Reset window scroll to the top after render, then focus the workspace. Also move fixed mobile toasts above the bottom navigation and add bottom body padding.
+
+**Proof:** Repeated narrow-window route changes start at the route heading, with no horizontal overflow or toast-covered navigation.
+
+### Failure 13 — the old Mentor UI had no useful pending/error state
+
+**Symptom:** After submission the input became disabled with no clear progress, messages had weak hierarchy, and a failed request could lose the typed question.
+
+**Fix:** LearnTube `1.0.7` added message roles/avatars/times, generated starter questions, source context, a visible reading state, duplicate-submit protection, an auto-growing `1200`-character composer, character count, keyboard shortcut, latest-message reveal, and input restoration on error. Starter prompts disappear after conversation begins.
+
+**Proof:** Desktop and `390×780` harness QA exercised prompt selection, character-count update, keyboard submission, route navigation, and responsive composition.
+
+### Failure 14 — publishing `1.0.7` did not update the installed version
+
+**Symptom:** `apps publish` created version `1.0.7`, but generic install returned `installed_version: "1.0.6"`.
+
+**Cause:** The app was already `pending_review`; the review candidate remained pinned to `1.0.6`. Latest uploaded and review candidate are independent fields.
+
+**Fix:** Run `apps submit-review learntube-study`, verify candidate `1.0.7`, install again, then verify grants.
+
+**Proof:** Final status/grants reported:
+
+```text
+latest_version.version:     1.0.7
+review_candidate_version:   1.0.7
+installed_version:          1.0.7
+update_available:           false
+bundle_status:              bundle_ready
+```
+
+### Failure 15 — uploaded and installed did not mean App Store public
+
+**Symptom:** The app was absent from the Marketplace even though versions, installation, grants, and review submission existed.
+
+**Cause:** Final state was `pending_review`, `is_published: false`, with no approved public version. “Publish” in the CLI upload command meant creating the immutable developer version, not Marketplace release.
+
+**Fix:** Stop and report the true state. Wait for Anna administrator approval of exact candidate `1.0.7`; only then use the current approved-version release action with authorization. Reinstall from the public Marketplace afterward.
+
+### LearnTube `1.0.7` final verification gate
+
+```bash
+npm test
+# 9 JavaScript tests passed
+
+uv run --project executas/my-first-anna-app --with pytest pytest executas/my-first-anna-app -q
+# 6 Python tests passed
+
+anna-app validate --strict
+# passed with CLI 0.1.49 / dispatcher schema 0.19.0
+
+anna-app apps status learntube-study --account https://anna.partners --json
+anna-app apps grants learntube-study --account https://anna.partners --json
+anna-app apps versions learntube-study --account https://anna.partners --json
+```
+
+The source commit for the Mentor/navigation release was `8ddfd6f` (`Improve Mentor chat and workspace navigation`). The exact repository state was clean before handoff.
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
@@ -589,18 +971,27 @@ Definition of done:
 - App works standalone but not in Anna: inspect the harness RPC log, iframe console, CSP, and SDK handshake.
 - Storage disappears: ensure keys are namespaced, writes are awaited, and the harness storage mode is understood.
 - Model returns malformed JSON: validate, make one JSON-only repair request, then fail visibly.
+- Mock LLM returns the generation JSON in chat: inspect the RPC log. In CLI `0.1.49`, `contentIncludes` cannot reliably distinguish object-array `messages`; use scenario-specific fixtures rather than changing production prompts to fit the mock bug.
+- Narrow-browser screenshot still shows desktop layout: read the harness-reported iframe size. Test with a temporary manifest whose view `default_size` is actually narrow; shrinking only the outer browser is insufficient.
+- New route opens halfway down the page: reset `window.scrollTo({top: 0})` after route render, then move focus without scrolling.
+- Mobile toast covers bottom navigation: offset the toast above the nav and reserve bottom body padding.
 - Executa corrupts protocol: keep stdout JSON-only and move logs to stderr.
 - Executa installs successfully but remains unloaded: run the released binary through `initialize` before `describe`. Implement `initialize`/`shutdown`, ignore no-ID notifications, return an Agent-compatible describe manifest, bump the immutable helper version, rebuild all platforms, publish it, then use the helper-specific Upgrade action on every Agent. Do not accept `is_installed: true` as success until `agent_loaded`, `agent_running`, `agent_version`, and `agent_tools_count` are correct.
 - Executa works locally but not in cloud: build the correct native Linux artifact and test archive entrypoint/permissions.
 - YouTube or another public service blocks cloud IPs: present an alternate user-provided input path; do not hide the service limitation.
 - `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key.
 - App cannot publish: inspect status, version uniqueness, listing preflight, bundle readiness, Executa catalogue resolution, and account selection.
+- `anna-app whoami --account ...` says unknown option: CLI `0.1.49` uses `anna-app whoami` or `anna-app whoami --json`; use `--account` on app/executa lifecycle commands that document it.
+- Windows `Start-Process` says `%1 is not a valid Win32 application` for `anna-app`: `Get-Command anna-app` may resolve to `anna-app.ps1`. Launch `pwsh.exe -NoProfile -File <anna-app.ps1> ...` with `-WindowStyle Hidden`, or run it normally in a terminal. Track the listener PID separately from the wrapper PID.
 - `apps status` says no app, then Windows prints a libuv `UV_HANDLE_CLOSING` assertion: treat the explicit “no app with slug” result as the availability signal, then confirm with the Developer Console before publishing. The trailing assertion is a CLI shutdown bug, not proof that the slug exists.
 - `apps publish --dry-run` describes the correct new slug/version but exits nonzero with the same Windows assertion: inspect the meaningful dry-run output, re-run strict validation, and do not perform the real upload until the identity gate is complete.
 - Developer listing fields appear blank immediately after first publish: wait for the record to load or use Refresh before editing; confirm the slug field before saving.
 - Developer page says “No working draft yet” after `apps publish`: verify the immutable version under Version history. This is expected for the guide's direct publish path.
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
+- New version uploaded but install still reports the prior version: compare `latest_version.version` and `review_candidate_version`. A pending-review app's generic install can follow the old candidate; pin the intended version, verify status, reinstall, and verify `installed_version`.
+- `apps grants` reports `installed_executas: []` or an empty `executa_grants`: do not diagnose from that field alone for an unchanged developer-installed helper. Verify the exact Agent row, required-tool token scope, helper version, loaded/running state, and a real invocation.
+- App is installed but absent from the App Store: inspect `status`, `is_published`, and the candidate. `pending_review` with `is_published: false` is not public; wait for approval and release the approved exact version.
 - `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify `package_name` and `executable_name` both match the minted production tool ID, verify the installed app version, and inspect `apps grants`. Then distinguish installation from loading: a successful install with `agent_loaded: false` usually means the production handshake or describe manifest was rejected. If the app resolves a legacy bundled tool, correct or mint the app-specific Executa identity; if the Agent rejects the process, add the complete initialization contract. In either case, bump the immutable helper version, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, upgrade the exact helper on each Agent, and confirm a real invocation.
 - A raw deployment error exposes a production tool ID to users: catch tool-invocation rejection and present a recovery message that suggests updating/reinstalling for the selected Agent or using the app's manual-input fallback.
 
