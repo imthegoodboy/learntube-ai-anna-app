@@ -13,6 +13,7 @@ import {
   parseStructuredJson,
   scheduleCard,
   splitSource,
+  transcriptToolErrorMessage,
   touchStudyDay,
   weakConceptList,
 } from "./core.js";
@@ -516,12 +517,17 @@ async function resolveYouTubeSource(url) {
   if (!extractYouTubeId(url)) throw new Error("Enter a valid YouTube watch, share, shorts, live, or embed URL.");
   if (!state.anna?.tools?.invoke) throw new Error("Open LearnTube inside Anna to retrieve YouTube captions.");
   updateBusy("Retrieving the video's captions…", 18);
-  const response = await state.anna.tools.invoke({
-    tool_id: TRANSCRIPT_TOOL_ID,
-    method: "youtube.transcript",
-    args: { url, languages: ["en", "en-US", "en-GB"] },
-    timeoutMs: 90000,
-  });
+  let response;
+  try {
+    response = await state.anna.tools.invoke({
+      tool_id: TRANSCRIPT_TOOL_ID,
+      method: "youtube.transcript",
+      args: { url, languages: ["en", "en-US", "en-GB"] },
+      timeoutMs: 90000,
+    });
+  } catch (error) {
+    throw new Error(transcriptToolErrorMessage(error));
+  }
   const payload = response?.result?.data || response?.data || response?.result || response;
   if (!payload?.ok) {
     const error = payload?.message || "Captions could not be retrieved for this video.";

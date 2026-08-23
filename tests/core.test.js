@@ -7,6 +7,7 @@ import {
   parseStructuredJson,
   scheduleCard,
   splitSource,
+  transcriptToolErrorMessage,
   touchStudyDay,
 } from "../bundle/core.js";
 import { createCheatSheetPdf } from "../bundle/pdf.js";
@@ -90,4 +91,13 @@ test("createCheatSheetPdf produces a complete one-page PDF document", async () =
   assert.ok(content.startsWith("%PDF-1.4"));
   assert.ok(content.endsWith("%%EOF"));
   assert.match(content, /\/Count 1/);
+});
+
+test("transcriptToolErrorMessage hides deployment internals and gives a recovery path", () => {
+  const message = transcriptToolErrorMessage(
+    new Error("executa 'tool-secret-id' is not deployed on the selected agent"),
+  );
+  assert.doesNotMatch(message, /tool-secret-id/);
+  assert.match(message, /Update or reinstall LearnTube AI/);
+  assert.match(message, /Paste transcript/);
 });

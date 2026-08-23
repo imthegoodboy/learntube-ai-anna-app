@@ -328,3 +328,16 @@ export function clampText(value, limit) {
   const text = String(value || "");
   return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1)).trim()}…`;
 }
+
+export function transcriptToolErrorMessage(error) {
+  const message = String(error?.message || error || "").trim();
+  if (/not deployed on the selected agent|not installed on the selected agent/i.test(message)) {
+    return "The transcript helper is not ready on this Anna Agent yet. Update or reinstall LearnTube AI for this agent, then retry—or choose Paste transcript to continue now.";
+  }
+  if (/timed?\s*out|timeout/i.test(message)) {
+    return "The transcript helper took too long to respond. Retry once, or choose Paste transcript to continue now.";
+  }
+  return message
+    ? `${message} You can still use this lesson by choosing Paste transcript.`
+    : "The transcript helper could not run. Retry, or choose Paste transcript to continue now.";
+}

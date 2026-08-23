@@ -1,7 +1,7 @@
 {
   "slug": "learntube-study",
   "name": "LearnTube AI",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "tagline": "Turn any YouTube lesson into notes, practice, and a revision plan.",
   "description": "LearnTube AI turns a captioned YouTube video or pasted transcript into a complete, saved study workspace. Generate source-grounded notes, flashcards, quizzes, action steps, a topic roadmap, and mentor answers; track recall and weak concepts; and export a one-page cheat sheet. Lessons and progress sync through Anna Storage, while generation uses the learner's Anna model access—no separate model API key is required.",
   "category": "education",
