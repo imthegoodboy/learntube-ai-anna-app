@@ -1408,8 +1408,12 @@ Permissions dialog then displayed separate checked `agent.auto` and
 reported `manifest_host_api.agent.session.auto=true`, `fixed=true`,
 `satisfied=true`, and `missing=[]`. A fresh `apps status` reported
 `review_candidate_version=1.0.10` while the App remained `pending_review` and
-unreleased. Treat those server responses—not the momentary toast or stale app
-card—as the final acceptance evidence.
+unreleased. Once the candidate pointer updated, Developer Console → **Install**
+installed the exact immutable `1.0.10` candidate. Saving its Permissions dialog
+also returned `Permissions saved`; the final grant then reported
+`installed_version=latest_version=1.0.10`, `update_available=false`,
+`satisfied=true`, and `missing=[]`. Treat those server responses—not the
+momentary toast or stale app card—as the final acceptance evidence.
 
 ### Blocker 2 — listing says `No bundled Executa` although the helper is learned
 
