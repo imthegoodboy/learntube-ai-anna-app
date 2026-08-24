@@ -1399,6 +1399,18 @@ strict validation, publish a new immutable version, install that exact version,
 then reopen Permissions and prove `Save all permissions` succeeds. Editing only
 the saved grant cannot fix a manifest/grant mismatch.
 
+Live `1.0.10` acceptance evidence: `apps push` created ready working-draft
+revision `r2` with the same content hash as immutable version `#575`; Developer
+Console → Versions → **Install & test** installed it as `0.0.0-draft`. The
+Permissions dialog then displayed separate checked `agent.auto` and
+`agent.fixed` rows. **Save all permissions** closed the dialog and displayed
+`Permissions saved` with neither manifest error. A follow-up `apps grants`
+reported `manifest_host_api.agent.session.auto=true`, `fixed=true`,
+`satisfied=true`, and `missing=[]`. A fresh `apps status` reported
+`review_candidate_version=1.0.10` while the App remained `pending_review` and
+unreleased. Treat those server responses—not the momentary toast or stale app
+card—as the final acceptance evidence.
+
 ### Blocker 2 — listing says `No bundled Executa` although the helper is learned
 
 There are four links in the declaration chain, and all four must resolve:
