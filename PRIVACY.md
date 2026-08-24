@@ -24,7 +24,7 @@ Saved lessons remain in Anna Storage until you delete them in the app or remove 
 
 ## Third-party services
 
-Use of Anna and YouTube remains subject to their respective terms and privacy policies. LearnTube AI does not request a separate model API key.
+Use of Anna and YouTube remains subject to their respective terms and privacy policies. Captioned YouTube URLs are first resolved through YouTube's public caption interface. When YouTube blocks the Anna Agent's network, the bundled transcript helper may request the same public caption text through the keyless caption edge at `youtube-transcript.ai`; the submitted video ID is included in that request. LearnTube AI does not send lesson notes, mentor questions, saved progress, account details, or model credentials to that service and does not request a separate model API key.
 
 ## Contact
 

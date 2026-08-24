@@ -12,7 +12,8 @@ import json
 import re
 import sys
 from typing import Any
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -27,12 +28,14 @@ from youtube_transcript_api._errors import (
 TOOL_ID = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
 TOOL_METHOD = "youtube.transcript"
 MAX_TRANSCRIPT_CHARS = 180_000
+MAX_EDGE_RESPONSE_BYTES = 2_000_000
+EDGE_TRANSCRIPT_ORIGIN = "https://youtube-transcript.ai"
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 MANIFEST = {
     "name": TOOL_ID,
     "display_name": "LearnTube Study Transcript",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": (
         "Retrieves public YouTube captions and metadata for source-grounded "
         "LearnTube AI lessons."
@@ -155,6 +158,69 @@ def _fetch_transcript(video_id: str, preferred_languages: list[str]) -> dict[str
         "durationSeconds": round(duration_seconds, 2),
         "segmentCount": len(lines),
         "truncated": truncated,
+        "retrievalMode": "youtube_captions",
+    }
+
+
+def _duration_from_header(header: str) -> float:
+    match = re.search(r"\bDuration:\s*((?:\d+:){1,2}\d+)\b", header, flags=re.IGNORECASE)
+    if not match:
+        return 0.0
+    parts = [int(part) for part in match.group(1).split(":")]
+    if len(parts) == 2:
+        minutes, seconds = parts
+        return float(minutes * 60 + seconds)
+    hours, minutes, seconds = parts
+    return float(hours * 3600 + minutes * 60 + seconds)
+
+
+def _fetch_edge_transcript(video_id: str, preferred_languages: list[str]) -> dict[str, Any]:
+    """Fetch a public transcript through a caption edge cache.
+
+    YouTube frequently blocks datacenter IPs even for public caption tracks.
+    The edge route is used only after that specific block and keeps the App's
+    URL flow functional on Anna Cloud Agents without an API key or user OAuth.
+    """
+
+    preferred = next((language for language in preferred_languages if language), "")
+    query = f"?{urlencode({'lang': preferred})}" if preferred else ""
+    endpoint = f"{EDGE_TRANSCRIPT_ORIGIN}/transcript/{video_id}.txt{query}"
+    request = Request(
+        endpoint,
+        headers={
+            "Accept": "text/markdown,text/plain;q=0.9",
+            "User-Agent": "LearnTube-Anna/1.0 (+https://anna.partners)",
+        },
+    )
+    with urlopen(request, timeout=25) as response:  # noqa: S310 - fixed HTTPS origin
+        body = response.read(MAX_EDGE_RESPONSE_BYTES + 1)
+
+    truncated = len(body) > MAX_EDGE_RESPONSE_BYTES
+    text = body[:MAX_EDGE_RESPONSE_BYTES].decode("utf-8", errors="replace").strip()
+    if "## Transcript" not in text:
+        raise ValueError("caption edge response did not contain a transcript")
+
+    header, transcript_text = text.split("## Transcript", 1)
+    transcript_text = transcript_text.strip()
+    if len(transcript_text) < 40:
+        raise ValueError("caption edge response was empty")
+
+    title_match = re.search(r"^#\s*Transcript:\s*(.+)$", header, flags=re.MULTILINE)
+    language_match = re.search(r"^Language:\s*([^\s(·]+)", header, flags=re.MULTILINE | re.IGNORECASE)
+    language_code = language_match.group(1).strip() if language_match else preferred
+    is_generated = bool(re.search(r"auto-generated", header, flags=re.IGNORECASE))
+    segment_count = sum(1 for line in transcript_text.splitlines() if line.strip())
+
+    return {
+        "transcript": transcript_text[:MAX_TRANSCRIPT_CHARS],
+        "language": language_code or "Unknown",
+        "languageCode": language_code,
+        "isGenerated": is_generated,
+        "durationSeconds": _duration_from_header(header),
+        "segmentCount": segment_count,
+        "truncated": truncated or len(transcript_text) > MAX_TRANSCRIPT_CHARS,
+        "titleHint": title_match.group(1).strip() if title_match else "",
+        "retrievalMode": "caption_edge_fallback",
     }
 
 
@@ -170,18 +236,26 @@ def transcript_result(args: dict[str, Any]) -> dict[str, Any]:
     raw_languages = args.get("languages")
     languages = [str(item).strip() for item in raw_languages or ["en"] if str(item).strip()][:8]
     try:
-        transcript = _fetch_transcript(video_id, languages)
+        try:
+            transcript = _fetch_transcript(video_id, languages)
+        except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+            raise
+        except Exception:  # YouTube uses several changing block/network error classes.
+            transcript = _fetch_edge_transcript(video_id, languages)
         if not transcript["transcript"]:
             return {
                 "ok": False,
                 "code": "EMPTY_TRANSCRIPT",
                 "message": "YouTube returned captions, but they did not contain readable text.",
             }
+        metadata = _metadata(video_id)
+        if metadata["title"] == "YouTube lesson" and transcript.get("titleHint"):
+            metadata["title"] = str(transcript["titleHint"])
         return {
             "ok": True,
             "videoId": video_id,
             "url": f"https://www.youtube.com/watch?v={video_id}",
-            **_metadata(video_id),
+            **metadata,
             **transcript,
         }
     except TranscriptsDisabled:
@@ -190,11 +264,11 @@ def transcript_result(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "code": "NO_TRANSCRIPT", "message": "No usable captions were found for this video."}
     except VideoUnavailable:
         return {"ok": False, "code": "VIDEO_UNAVAILABLE", "message": "This video is private, unavailable, or region restricted."}
-    except (RequestBlocked, IpBlocked):
+    except (RequestBlocked, IpBlocked, HTTPError, URLError, TimeoutError):
         return {
             "ok": False,
             "code": "YOUTUBE_BLOCKED",
-            "message": "YouTube blocked caption access from the current Anna Agent.",
+            "message": "The public caption services could not reach this video. Please retry in a moment.",
         }
     except Exception as exc:  # noqa: BLE001 - protocol boundary must return a stable envelope
         return {

@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.7` production experience from 2026-08-23, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, a production Agent handshake failure, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.8` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1254,6 +1254,267 @@ strict Anna validation passed with CLI 0.1.49 / schema 0.19.0
 no Executa, external origin, provider key, or hardcoded generated content
 ```
 
+## SkillQuest AI 1.0.0: split model creativity from deterministic contracts
+
+SkillQuest AI was built as a separate UI-only app at
+`C:\Users\parth\Desktop\anna-skillquest-ai`. It uses Anna LLM, Anna Storage,
+no Executa, and no external API key.
+
+### Large structured generation can fail in two different ways
+
+The live `qwen3.7-plus` provider exposed both failure shapes:
+
+1. A full 12-quest JSON request returned visible JSON truncated at the provider's
+   observed `4098`-token cap. A repair request was truncated too.
+2. Compact 12-quest requests with `2400` and `4098` effective output budgets
+   consumed the entire budget but returned empty `content.text`.
+
+Do not handle only JSON parse errors. The initial `llm.complete` call itself can
+throw after an empty-content check, so the bounded retry must wrap request,
+response extraction, parsing, shape validation, and normalization together.
+
+### Reliable responsibility split
+
+The production contract asks Anna only for a compact world outline:
+
+```json
+{
+  "title": "...",
+  "summary": "...",
+  "world": {"name": "...", "tagline": "..."},
+  "skills": [["ability", "description"]],
+  "stages": [["stage name", "theme", "observable focus"]]
+}
+```
+
+The deterministic engine expands the validated outline into exactly four stages
+and twelve quests. It owns quest types, the two boss positions, durations, XP,
+field-guide explanations, action steps, success criteria, reflections, and
+sequential unlocking. Anna still provides meaningful creative/pedagogical
+personalization; the model is no longer responsible for a combinatorial schema
+that can exceed the hosted provider's output budget.
+
+Production rules:
+
+1. Validate exact stage and skill counts before materialization.
+2. Let deterministic code enforce product invariants after model creativity.
+3. Treat empty and truncated text as ordinary recoverable failures.
+4. Retry once, then use a labelled local map derived only from learner inputs.
+5. Keep evaluation and Mentor fallbacks separately labelled as `Local fallback`.
+6. Reject valid-but-wrong structured output in chat; never show raw plan JSON to
+   the learner.
+
+### Exact-frame visual QA lessons
+
+- The harness iframe can move outside the outer page viewport after nested
+  interactions. A `page.screenshot({clip: boundingBox})` can silently produce a
+  cropped listing asset even when the reported iframe width is correct.
+- Use `locator("iframe#app").screenshot(...)`, reset both outer and iframe scroll,
+  assert native dimensions, and inspect the resulting PNG.
+- For a scrolled listing view, wait for or explicitly settle reveal classes in
+  the asset-only test before capture.
+- A fixed modal or detached navigation item can be visible inside the app but be
+  reported outside the outer harness viewport by Playwright. For that known
+  nested-harness limitation, dispatch the element's DOM click in the test after
+  first asserting that the control exists and the dialog is visible.
+- Mobile QA still requires a temporary manifest whose real Anna
+  `default_size` is `390x780`; widening the outer test page only gives the
+  harness enough room to capture the complete narrow iframe.
+
+### SkillQuest verification gate
+
+```text
+13 deterministic logic/platform tests passed
+5 Anna-harness desktop workflows passed
+axe accessibility scans passed
+1 real 390x780 Anna-manifest workflow passed without horizontal overflow
+1 live Anna outline + mission evaluation + Mentor workflow passed in 1.9 minutes
+listing PNGs reviewed at 1200x809, 1200x809, and 390x755
+512x512 listing logo reviewed
+strict validation passed with CLI 0.1.49 / schema 0.19.0
+0 npm vulnerabilities
+GitHub source: https://github.com/imthegoodboy/skillquest-ai
+Anna app id 220; immutable version 1.0.0 (#569); bundle_ready
+owner install confirmed at v1.0.0; review candidate submitted
+remote lifecycle at handoff: pending_review, is_published=false
+```
+
+## LearnTube AI 1.0.8 Marketplace review recovery
+
+Anna Marketplace tested LearnTube AI `1.0.7` on 2026-08-24. Five of six
+scenarios passed, including source-grounded Mentor answers, but review was
+blocked by permission saving, the bundled-tool listing, missing screenshots,
+the direct YouTube path on a Cloud Agent, and inconsistent version surfaces.
+Treat each as a separate release gate; a working UI does not prove the listing,
+grant, frozen dependency, or selected Agent is correct.
+
+### Blocker 1 — `Save failed: manifest does not declare agent.session.auto`
+
+The installed grant had `llm_grant.agent.auto=true`, while immutable version
+`1.0.7` normalized the manifest to:
+
+```json
+"agent": {
+  "session": { "auto": false, "fixed": null },
+  "tools": []
+}
+```
+
+Top-level `permissions[]` is display/audit metadata and does not open the Agent
+Host API. Explicitly declare the submode under `ui.host_api`:
+
+```json
+{
+  "host_capabilities": ["llm.complete", "aps.kv", "agent-sessions"],
+  "ui": {
+    "host_api": {
+      "agent": {
+        "session": { "auto": true },
+        "tools": []
+      }
+    }
+  }
+}
+```
+
+An empty `agent.tools` list keeps the unused Agent tool surface closed. Run
+strict validation, publish a new immutable version, install that exact version,
+then reopen Permissions and prove `Save all permissions` succeeds. Editing only
+the saved grant cannot fix a manifest/grant mismatch.
+
+### Blocker 2 — listing says `No bundled Executa` although the helper is learned
+
+There are four links in the declaration chain, and all four must resolve:
+
+```text
+app.json bundled_executas.youtube-transcript.path
+  -> manifest.required_executas bundled:youtube-transcript
+  -> manifest.ui.host_api.tools required:bundled:youtube-transcript
+  -> bundle/anna-tool-ids.js youtube-transcript -> minted production tool id
+```
+
+The source for `1.0.7` contained the chain, but Executa status still reported
+`latest_version.in_published_app=false`; the store therefore had no frozen
+bundled-tool association to show. The current guide's supported fix is to run
+the full orchestration command from the App root:
+
+```powershell
+anna-app apps publish --account https://anna.partners --json
+```
+
+Do not use `--skip-executa-publish` or `--no-bundled-executas` for the review
+candidate. After publishing, check all of these instead of trusting one screen:
+
+- immutable manifest contains the real production Tool ID as required;
+- app version has a frozen Executa snapshot;
+- `executa status <tool-id>` reports the new helper version and
+  `in_published_app=true`;
+- Developer Console → Executas lists it under Required;
+- the installed selected Agent shows the exact helper loaded and running;
+- a real `youtube.transcript` invocation succeeds.
+
+For this repair, App `1.0.8` raises `min_version` to helper `1.0.4`. The helper
+must be rebuilt for Windows x86-64, Linux x86-64, Darwin arm64, and Darwin
+x86-64 and published before the App is frozen.
+
+### Blocker 3 — Marketplace screenshots are empty
+
+Use real product states, not composed marketing mockups. Keep project-relative
+PNG files in `app.json`:
+
+```json
+"screenshots": [
+  "assets/screenshots/learntube-capture.png",
+  "assets/screenshots/learntube-notes.png",
+  "assets/screenshots/learntube-quiz.png"
+]
+```
+
+Then run:
+
+```powershell
+anna-app apps sync-meta --account https://anna.partners --json
+```
+
+The CLI uploads local screenshots to Anna's CDN and patches the ordered listing
+URLs. Reopen Listing and confirm all three URLs render. For harness screenshots,
+capture only `iframe#app`; account for browser zoom/device-pixel ratio and
+inspect every saved PNG before upload so RPC logs or clipped navigation never
+enter the listing asset.
+
+### Blocker 4 — direct YouTube URL fails on Anna Cloud Agent IPs
+
+This is not fixed by a normal YouTube API key. Google's official
+`captions.download` endpoint requires OAuth and permission to edit the video,
+so it cannot download captions for an arbitrary public lesson. The original
+helper used `youtube-transcript-api`, which talks to a public caption interface
+without credentials; YouTube can block that interface from datacenter IPs.
+
+The production recovery chain is:
+
+```text
+public YouTube URL
+  -> bundled helper validates the 11-character video id
+  -> try YouTube public captions directly
+  -> on a non-terminal block/network failure, fetch the public transcript from
+     https://youtube-transcript.ai/transcript/<VIDEO_ID>.txt
+  -> validate the transcript marker, length, language, title, duration, and cap
+     the response before returning source evidence
+```
+
+Do not fall through to the secondary route for a known `CAPTIONS_DISABLED`,
+`NO_TRANSCRIPT`, or `VIDEO_UNAVAILABLE` result. Do not hardcode an API key. Keep
+the caption-edge origin fixed in code, bound response bytes and timeouts, never
+send lesson notes or account data, and disclose the video-ID request in the
+privacy policy. Retain Paste transcript for genuinely unavailable/private
+videos, but do not use it to mask a broken direct-link path during review.
+
+Required tests:
+
+- parser test for the edge Markdown envelope;
+- forced `IpBlocked` test proving the secondary route returns `ok:true`;
+- exact review URL smoke test:
+  `https://youtu.be/vf-cxgUXcMk?si=inAYZAmIUL4eNYEb`;
+- installed Local Agent invocation;
+- installed Anna Cloud Linux Agent invocation;
+- full UI generation from the retrieved transcript.
+
+Useful primary/source references:
+
+- [Google captions.download](https://developers.google.com/youtube/v3/docs/captions/download)
+- [Google caption implementation guide](https://developers.google.com/youtube/v3/guides/implementation/captions)
+- [Keyless caption edge documentation](https://youtube-transcript.ai/youtube-transcript-api)
+
+### Blocker 5 — listing shows no version while Permissions shows `1.0.7`
+
+Keep `app.json` and `package.json` on the same new SemVer (`1.0.8`) and add a
+real changelog. The helper can have its own SemVer (`1.0.4`), but every helper
+surface—`executa.json`, `pyproject.toml`, runtime `describe`, archive names,
+release title, and binary URLs—must agree.
+
+Do not use the Developer app-card label alone as the version oracle; the card
+has been observed showing `v0.0.0` while immutable and installed versions were
+correct. Verify Version history, CLI `apps versions`, candidate version,
+Permissions, and Installed Apps together. Before resubmission, pin/install the
+new candidate and confirm all user-facing surfaces show the intended version.
+
+### LearnTube review-candidate gate
+
+```text
+app source version == package version == 1.0.8
+helper source/describe/archive/catalogue version == 1.0.4
+strict schema validation passes
+UI/core and Python Executa tests pass
+four native binary archives and SHA-256 files exist
+full `apps publish` resolves and freezes the bundled helper
+permission dialog saves without agent.session.auto error
+three real Marketplace screenshots render
+exact review YouTube URL works on Local and Cloud Linux Agents
+notes, cards, quiz, roadmap, Mentor, storage, and PDF paths pass
+selected Agent shows helper loaded/running
+review candidate points at 1.0.8 before resubmission
+```
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
@@ -1277,7 +1538,7 @@ no Executa, external origin, provider key, or hardcoded generated content
 - Executa corrupts protocol: keep stdout JSON-only and move logs to stderr.
 - Executa installs successfully but remains unloaded: run the released binary through `initialize` before `describe`. Implement `initialize`/`shutdown`, ignore no-ID notifications, return an Agent-compatible describe manifest, bump the immutable helper version, rebuild all platforms, publish it, then use the helper-specific Upgrade action on every Agent. Do not accept `is_installed: true` as success until `agent_loaded`, `agent_running`, `agent_version`, and `agent_tools_count` are correct.
 - Executa works locally but not in cloud: build the correct native Linux artifact and test archive entrypoint/permissions.
-- YouTube or another public service blocks cloud IPs: present an alternate user-provided input path; do not hide the service limitation.
+- YouTube or another public service blocks cloud IPs: first determine whether the official API can legally/technically serve the use case. For arbitrary public YouTube captions, OAuth/API keys do not bypass the video-owner restriction. Use a bounded, disclosed server-side fallback, test it on Anna Cloud Linux, and retain manual input only for genuinely unavailable sources; do not present manual paste as the fix for a required direct-link workflow.
 - `dev.key` permission warning: restrict the file to the current user with OS-native ACLs; never print or commit the key. On Windows, `doctor` may still print mode `666`; trust the explicit `icacls` principal list plus a successful harness session, not the emulated POSIX bit alone.
 - App cannot publish: inspect status, version uniqueness, listing preflight, bundle readiness, Executa catalogue resolution, and account selection.
 - `anna-app whoami --account ...` says unknown option: CLI `0.1.49` uses `anna-app whoami` or `anna-app whoami --json`; use `--account` on app/executa lifecycle commands that document it.

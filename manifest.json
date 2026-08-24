@@ -6,11 +6,11 @@
     "storage.read",
     "storage.write"
   ],
-  "host_capabilities": ["llm.complete", "aps.kv"],
+  "host_capabilities": ["llm.complete", "aps.kv", "agent-sessions"],
   "required_executas": [
     {
       "tool_id": "bundled:youtube-transcript",
-      "min_version": "1.0.3",
+      "min_version": "1.0.4",
       "version": "latest"
     }
   ],
@@ -41,6 +41,10 @@
     "host_api": {
       "tools": ["required:bundled:youtube-transcript"],
       "llm": ["complete"],
+      "agent": {
+        "session": { "auto": true },
+        "tools": []
+      },
       "storage": ["get", "set", "delete", "list"],
       "window": ["set_title", "ready"]
     },

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -20,7 +21,7 @@ def test_production_agent_handshake() -> None:
         "id": 1,
         "result": {
             "protocolVersion": "2.0",
-            "serverInfo": {"name": "LearnTube Study Transcript", "version": "1.0.3"},
+            "serverInfo": {"name": "LearnTube Study Transcript", "version": "1.0.4"},
             "client_capabilities": {},
             "capabilities": {},
         },
@@ -98,3 +99,53 @@ def test_fetch_transcript_falls_back_to_first_available_language() -> None:
         result = plugin._fetch_transcript("UF8uR6Z6KLc", ["en"])
     assert result["languageCode"] == "es"
     assert result["transcript"] == "[00:00] Hello"
+
+
+def test_cloud_ip_block_uses_keyless_caption_edge_fallback() -> None:
+    edge_body = b"""# Transcript: Graph traversal lesson
+
+Source video: https://www.youtube.com/watch?v=UF8uR6Z6KLc
+Language: en (auto-generated) \xc2\xb7 Duration: 12:34 \xc2\xb7 Words: 4000
+
+## Transcript
+[0:02] Breadth-first search visits a graph level by level.
+[0:08] Depth-first search explores one branch before backtracking.
+"""
+
+    class Response(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+
+    with patch.object(plugin, "urlopen", return_value=Response(edge_body)):
+        result = plugin._fetch_edge_transcript("UF8uR6Z6KLc", ["en"])
+
+    assert result["retrievalMode"] == "caption_edge_fallback"
+    assert result["titleHint"] == "Graph traversal lesson"
+    assert result["languageCode"] == "en"
+    assert result["durationSeconds"] == 754.0
+    assert "Depth-first search" in result["transcript"]
+
+
+def test_transcript_result_recovers_from_cloud_ip_block() -> None:
+    fallback = {
+        "transcript": "[0:02] Caption evidence from the resilient route.",
+        "language": "en",
+        "languageCode": "en",
+        "isGenerated": True,
+        "durationSeconds": 2.0,
+        "segmentCount": 1,
+        "truncated": False,
+        "titleHint": "Recovered lesson",
+        "retrievalMode": "caption_edge_fallback",
+    }
+    with patch.object(plugin, "_fetch_transcript", side_effect=plugin.IpBlocked("UF8uR6Z6KLc")), patch.object(
+        plugin, "_fetch_edge_transcript", return_value=fallback
+    ), patch.object(plugin, "_metadata", return_value={"title": "YouTube lesson", "channel": ""}):
+        result = plugin.transcript_result({"url": "https://youtu.be/UF8uR6Z6KLc"})
+
+    assert result["ok"] is True
+    assert result["title"] == "Recovered lesson"
+    assert result["retrievalMode"] == "caption_edge_fallback"

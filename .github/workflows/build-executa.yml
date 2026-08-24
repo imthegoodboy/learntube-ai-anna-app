@@ -6,7 +6,7 @@ on:
       release_tag:
         description: GitHub Release tag for these binaries
         required: true
-        default: learntube-study-transcript-v1.0.3
+        default: learntube-study-transcript-v1.0.4
   push:
     tags:
       - "learntube-study-transcript-v*"
@@ -51,7 +51,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          archive="tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-${{ matrix.target }}.tar.gz"
+          archive="tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-${{ matrix.target }}.tar.gz"
           mkdir -p package/bin
           cp dist/tool-nikku696969-learntube-study-transcript-ujzngt7x package/bin/
           tar -czf "dist/$archive" -C package bin/tool-nikku696969-learntube-study-transcript-ujzngt7x
@@ -60,7 +60,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-${{ matrix.target }}.zip"
+          $archive = "tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-${{ matrix.target }}.zip"
           New-Item -ItemType Directory -Force -Path package/bin | Out-Null
           Copy-Item -LiteralPath dist/tool-nikku696969-learntube-study-transcript-ujzngt7x.exe -Destination package/bin/
           Compress-Archive -Path package/bin -DestinationPath "dist/$archive"
@@ -68,10 +68,10 @@ jobs:
           "$hash  $archive" | Set-Content -LiteralPath "dist/$archive.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-${{ matrix.target }}
+          name: tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-${{ matrix.target }}
           path: |
-            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-${{ matrix.target }}.${{ matrix.archive }}
-            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-${{ matrix.target }}.${{ matrix.archive }}.sha256
+            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-${{ matrix.target }}.${{ matrix.archive }}
+            executas/my-first-anna-app/dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-${{ matrix.target }}.${{ matrix.archive }}.sha256
           if-no-files-found: error
 
   release:
@@ -93,5 +93,5 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Study Transcript v1.0.3" --notes "Four-platform Anna Executa binaries with the production initialize/describe/invoke/shutdown handshake required by Anna Agents." --repo "$GITHUB_REPOSITORY"
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --title "LearnTube Study Transcript v1.0.4" --notes "Four-platform Anna Executa binaries with resilient public-caption retrieval and the production initialize/describe/invoke/shutdown handshake required by Anna Agents." --repo "$GITHUB_REPOSITORY"
           fi

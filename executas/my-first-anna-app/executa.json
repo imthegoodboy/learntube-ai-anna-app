@@ -1,7 +1,7 @@
 {
   "slug": "learntube-study-transcript",
   "name": "LearnTube Study Transcript",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "executa_type": "tool",
   "description": "Retrieves public YouTube captions and metadata for source-grounded LearnTube AI lessons.",
   "tool_id": "tool-nikku696969-learntube-study-transcript-ujzngt7x",
@@ -23,22 +23,22 @@
         "supports_protocol": true,
         "binary_artifacts": {
           "darwin-arm64": {
-            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-darwin-arm64.tar.gz",
+            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-darwin-arm64.tar.gz",
             "entrypoint": "bin/tool-nikku696969-learntube-study-transcript-ujzngt7x",
             "format": "tar.gz"
           },
           "darwin-x86_64": {
-            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-darwin-x86_64.tar.gz",
+            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-darwin-x86_64.tar.gz",
             "entrypoint": "bin/tool-nikku696969-learntube-study-transcript-ujzngt7x",
             "format": "tar.gz"
           },
           "linux-x86_64": {
-            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-linux-x86_64.tar.gz",
+            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-linux-x86_64.tar.gz",
             "entrypoint": "bin/tool-nikku696969-learntube-study-transcript-ujzngt7x",
             "format": "tar.gz"
           },
           "windows-x86_64": {
-            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.3-windows-x86_64.zip",
+            "path": "dist/tool-nikku696969-learntube-study-transcript-ujzngt7x-1.0.4-windows-x86_64.zip",
             "entrypoint": "bin/tool-nikku696969-learntube-study-transcript-ujzngt7x.exe",
             "format": "zip"
           }

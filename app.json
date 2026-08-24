@@ -1,10 +1,20 @@
 {
   "slug": "learntube-study",
   "name": "LearnTube AI",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "tagline": "Turn any YouTube lesson into notes, practice, and a revision plan.",
   "description": "LearnTube AI turns a captioned YouTube video or pasted transcript into a complete, saved study workspace. Generate source-grounded notes, flashcards, quizzes, action steps, a topic roadmap, and mentor answers; track recall and weak concepts; and export a one-page cheat sheet. Lessons and progress sync through Anna Storage, while generation uses the learner's Anna model access—no separate model API key is required.",
   "category": "education",
+  "changelog": "Fixes Anna permission saving, freezes the transcript helper as a bundled Executa, adds Marketplace screenshots, and makes public YouTube links resilient to Cloud Agent IP blocking.",
+  "logo_file": "assets/learntube-app-icon.png",
+  "screenshots": [
+    "assets/screenshots/learntube-capture.png",
+    "assets/screenshots/learntube-notes.png",
+    "assets/screenshots/learntube-quiz.png"
+  ],
+  "homepage_url": "https://github.com/imthegoodboy/learntube-ai-anna-app",
+  "support_url": "https://github.com/imthegoodboy/learntube-ai-anna-app/issues",
+  "privacy_url": "https://github.com/imthegoodboy/learntube-ai-anna-app/blob/learntube-release-1.0.0/PRIVACY.md",
   "bundled_executas": {
     "youtube-transcript": {
       "path": "./executas/my-first-anna-app"
