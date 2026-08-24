@@ -1412,10 +1412,18 @@ candidate. After publishing, check all of these instead of trusting one screen:
 - immutable manifest contains the real production Tool ID as required;
 - app version has a frozen Executa snapshot;
 - `executa status <tool-id>` reports the new helper version and
-  `in_published_app=true`;
+  the expected helper catalogue version;
 - Developer Console → Executas lists it under Required;
 - the installed selected Agent shows the exact helper loaded and running;
 - a real `youtube.transcript` invocation succeeds.
+
+For an unreleased `pending_review` App, production `executa status` was observed
+still returning `latest_version.in_published_app=false` even after the full
+publish produced an immutable candidate whose manifest required the real Tool
+ID, Developer Console showed it under Required, and the installed Cloud Agent
+successfully invoked it. Treat that flag as released-App metadata, not a reason
+to run `apps release` before approval. Record the mismatch and use the frozen
+candidate manifest plus installed runtime behavior as the review evidence.
 
 For this repair, App `1.0.9` raises `min_version` to helper `1.0.4`. The helper
 must be rebuilt for Windows x86-64, Linux x86-64, Darwin arm64, and Darwin
