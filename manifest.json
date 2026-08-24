@@ -6,7 +6,7 @@
     "storage.read",
     "storage.write"
   ],
-  "host_capabilities": ["llm.complete", "aps.kv", "agent-sessions"],
+  "host_capabilities": ["llm.complete", "aps.kv"],
   "required_executas": [
     {
       "tool_id": "bundled:youtube-transcript",

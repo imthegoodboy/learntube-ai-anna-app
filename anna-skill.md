@@ -1365,7 +1365,7 @@ Host API. Explicitly declare the submode under `ui.host_api`:
 
 ```json
 {
-  "host_capabilities": ["llm.complete", "aps.kv", "agent-sessions"],
+  "host_capabilities": ["llm.complete", "aps.kv"],
   "ui": {
     "host_api": {
       "agent": {
@@ -1377,7 +1377,11 @@ Host API. Explicitly declare the submode under `ui.host_api`:
 }
 ```
 
-An empty `agent.tools` list keeps the unused Agent tool surface closed. Run
+The production API rejected `agent-sessions` as an unknown top-level
+`host_capabilities` value even though CLI `0.1.49` strict validation accepted
+arbitrary strings there. Do not add that value. The Agent permission is
+declared by the nested `ui.host_api.agent` block itself. An empty `agent.tools`
+list keeps the unused Agent tool surface closed. Run
 strict validation, publish a new immutable version, install that exact version,
 then reopen Permissions and prove `Save all permissions` succeeds. Editing only
 the saved grant cannot fix a manifest/grant mismatch.
@@ -1518,6 +1522,7 @@ review candidate points at 1.0.8 before resubmission
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
+- `apps publish` rejects `unknown host_capabilities: ['agent-sessions']` after strict validation passed: remove that top-level string. Declare Agent access under `ui.host_api.agent.session` and treat the production server as authoritative; CLI `0.1.49` validates `host_capabilities` as arbitrary strings.
 - `apps publish` rejects category `games`: use the current fixed taxonomy; for a game collection use `entertainment` and keep game concepts in tags.
 - Strict validation rejects a local realtime origin: `ui.bundle.external_origins` accepts HTTPS production origins, not `http://127.0.0.1`; keep local preview routing out of the production allowlist.
 - Cloudflare deploy warns that a workers.dev subdomain must be registered: inspect the account subdomain page, wait for DNS/TLS, and require a real `200` from the final HTTPS URL before wiring it into Anna. Do not assume upload output means the route is reachable.
