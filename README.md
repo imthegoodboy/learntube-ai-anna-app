@@ -32,4 +32,4 @@ Build the four native artifacts with `.github/workflows/build-executa.yml`. The 
 anna-app apps publish --account https://anna.partners
 ```
 
-The current Marketplace-candidate App version is `1.0.8`; its bundled transcript helper is `1.0.4`. Install the uploaded version in Anna, verify both a Local Agent and Anna Cloud Agent, confirm the permission dialog saves successfully, then submit `learntube-study` for review from the Developer Console.
+The current Marketplace-candidate App version is `1.0.9`; its bundled transcript helper is `1.0.4`. Install the uploaded version in Anna, verify both a Local Agent and Anna Cloud Agent, confirm the permission dialog saves successfully, then submit `learntube-study` for review from the Developer Console.

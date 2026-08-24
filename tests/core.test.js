@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   extractYouTubeId,
+  groundedMentorFallback,
   normalizeLesson,
   parseStructuredJson,
   scheduleCard,
@@ -23,6 +24,25 @@ test("extractYouTubeId accepts supported URL forms and rejects other hosts", () 
 
 test("parseStructuredJson tolerates a fenced model response", () => {
   assert.deepEqual(parseStructuredJson("```json\n{\"ok\":true}\n```"), { ok: true });
+});
+
+test("groundedMentorFallback answers from the closest lesson evidence", () => {
+  const lesson = {
+    keyIdeas: [{
+      heading: "BFS Data Structure",
+      explanation: "Breadth-first search uses a FIFO queue so earlier discovered nodes are explored first.",
+      example: "Neighbors 1 and 3 are processed in insertion order.",
+      evidenceQuote: "for BFS traversal a queue data structure is used",
+    }],
+  };
+  const answer = groundedMentorFallback(lesson, "Why does BFS use a queue instead of a stack?");
+  assert.match(answer, /FIFO queue/);
+  assert.match(answer, /Source cue/);
+});
+
+test("groundedMentorFallback refuses unrelated questions", () => {
+  const lesson = { keyIdeas: [{ heading: "BFS", explanation: "Breadth-first traversal uses a queue." }] };
+  assert.match(groundedMentorFallback(lesson, "Explain quantum entanglement"), /not covered in this lesson/i);
 });
 
 test("normalizeLesson validates generated collections and initializes progress", () => {

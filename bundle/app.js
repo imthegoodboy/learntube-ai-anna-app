@@ -7,6 +7,7 @@ import {
   dueCardCount,
   escapeHtml,
   extractYouTubeId,
+  groundedMentorFallback,
   isDue,
   lessonMatches,
   normalizeLesson,
@@ -467,7 +468,7 @@ function renderMentor(lesson) {
     return `<li class="chat-message" data-role="${isUser ? "user" : "assistant"}">
       <span class="chat-avatar" aria-hidden="true">${isUser ? "Y" : "LT"}</span>
       <div class="chat-body">
-        <div class="chat-meta"><strong>${isUser ? "You" : "Lesson mentor"}</strong>${timestamp ? `<time datetime="${escapeHtml(message.createdAt)}">${escapeHtml(timestamp)}</time>` : ""}</div>
+        <div class="chat-meta"><strong>${isUser ? "You" : "Lesson mentor"}</strong>${message.fallback ? "<span>Lesson-backed fallback</span>" : ""}${timestamp ? `<time datetime="${escapeHtml(message.createdAt)}">${escapeHtml(timestamp)}</time>` : ""}</div>
         <p>${escapeHtml(message.text)}</p>
       </div>
     </li>`;
@@ -549,12 +550,20 @@ function llmText(response) {
   return response?.content?.text || response?.result?.content?.text || response?.text || "";
 }
 
-async function complete(request) {
+async function complete(request, { emptyRetryMaxTokens = 0 } = {}) {
   if (!state.anna?.llm?.complete) {
     throw new Error("Open LearnTube inside Anna to generate AI study material.");
   }
-  const response = await state.anna.llm.complete(request, { timeoutMs: 180000 });
-  const text = llmText(response);
+  let response = await state.anna.llm.complete(request, { timeoutMs: 180000 });
+  let text = llmText(response);
+  if (!text && emptyRetryMaxTokens) {
+    response = await state.anna.llm.complete({
+      ...request,
+      maxTokens: emptyRetryMaxTokens,
+      systemPrompt: `${request.systemPrompt || ""}\nReturn the final visible answer immediately and keep it under 180 words.`,
+    }, { timeoutMs: 180000 });
+    text = llmText(response);
+  }
   if (!text) throw new Error("Anna returned an empty model response. Please retry.");
   return text;
 }
@@ -759,9 +768,9 @@ async function askMentor(form) {
     const answer = await complete({
       messages: [{ role: "user", content: { type: "text", text: `${question}\n\nLESSON NOTES\n${lesson.summary}\n${lesson.keyIdeas.map((idea) => `${idea.heading}: ${idea.explanation}`).join("\n")}\n\nSOURCE EVIDENCE\n${evidence}` } }],
       systemPrompt: "You are a grounded lesson mentor. Answer only from the supplied lesson notes and source evidence. Be clear and concise, connect ideas when the evidence supports it, and explicitly say 'That is not covered in this lesson' when it does not. Never invent citations or facts.",
-      maxTokens: 900,
+      maxTokens: 2400,
       temperature: 0.2,
-    });
+    }, { emptyRetryMaxTokens: 3200 });
     messages.push({ role: "assistant", text: answer, createdAt: new Date().toISOString() });
     state.mentorPendingLessonId = null;
     state.profile = touchStudyDay({ ...state.profile, xp: (state.profile.xp || 0) + 6 });
@@ -769,17 +778,18 @@ async function askMentor(form) {
     render();
     scrollMentorToEnd();
   } catch (error) {
-    messages.pop();
+    const fallback = groundedMentorFallback(lesson, question);
+    messages.push({ role: "assistant", text: fallback, fallback: true, createdAt: new Date().toISOString() });
     state.mentorPendingLessonId = null;
-    render();
-    const input = document.getElementById("mentor-question");
-    if (input) {
-      input.value = question;
-      resizeMentorInput(input);
-      const count = document.getElementById("mentor-count");
-      if (count) count.textContent = `${question.length.toLocaleString()} / 1,200`;
+    state.profile = touchStudyDay({ ...state.profile, xp: (state.profile.xp || 0) + 2 });
+    try {
+      await Promise.all([saveLesson(lesson), saveProfile()]);
+    } catch {
+      // Keep the source-backed response available in memory when storage is temporarily unavailable.
     }
-    showToast(error?.message || "The mentor could not answer right now.", 6000);
+    render();
+    scrollMentorToEnd();
+    showToast(`Anna could not finish this answer, so LearnTube used only the saved lesson evidence. ${error?.message || ""}`.trim(), 6000);
   }
 }
 

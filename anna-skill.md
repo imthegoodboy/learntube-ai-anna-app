@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.8` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.9` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1339,7 +1339,7 @@ owner install confirmed at v1.0.0; review candidate submitted
 remote lifecycle at handoff: pending_review, is_published=false
 ```
 
-## LearnTube AI 1.0.8 Marketplace review recovery
+## LearnTube AI 1.0.9 Marketplace review recovery
 
 Anna Marketplace tested LearnTube AI `1.0.7` on 2026-08-24. Five of six
 scenarios passed, including source-grounded Mentor answers, but review was
@@ -1417,7 +1417,7 @@ candidate. After publishing, check all of these instead of trusting one screen:
 - the installed selected Agent shows the exact helper loaded and running;
 - a real `youtube.transcript` invocation succeeds.
 
-For this repair, App `1.0.8` raises `min_version` to helper `1.0.4`. The helper
+For this repair, App `1.0.9` raises `min_version` to helper `1.0.4`. The helper
 must be rebuilt for Windows x86-64, Linux x86-64, Darwin arm64, and Darwin
 x86-64 and published before the App is frozen.
 
@@ -1491,7 +1491,7 @@ Useful primary/source references:
 
 ### Blocker 5 — listing shows no version while Permissions shows `1.0.7`
 
-Keep `app.json` and `package.json` on the same new SemVer (`1.0.8`) and add a
+Keep `app.json` and `package.json` on the same new SemVer (`1.0.9`) and add a
 real changelog. The helper can have its own SemVer (`1.0.4`), but every helper
 surface—`executa.json`, `pyproject.toml`, runtime `describe`, archive names,
 release title, and binary URLs—must agree.
@@ -1502,10 +1502,29 @@ correct. Verify Version history, CLI `apps versions`, candidate version,
 Permissions, and Installed Apps together. Before resubmission, pin/install the
 new candidate and confirm all user-facing surfaces show the intended version.
 
+### Live Cloud test follow-up — Mentor returns no visible text
+
+After direct-link generation and quiz scoring passed on the installed Fly Linux
+Cloud Agent, Qwen3.7 Max exhausted a `900`-token Mentor response budget twice
+without emitting visible text. The UI correctly restored the question, but that
+still leaves a flaky review path. App `1.0.9` fixes it in two layers:
+
+1. raise the bounded Mentor answer budget to `2400` tokens;
+2. retry one empty response at `3200` tokens with an explicit visible-answer
+   instruction;
+3. if Anna is still unavailable or empty, rank the saved lesson's key ideas by
+   question-token overlap and return a clearly labelled `Lesson-backed fallback`;
+4. refuse unrelated questions with `That is not covered in this lesson`;
+5. unit-test both the evidence match and refusal boundary.
+
+Never invent general knowledge in this fallback. Build it only from normalized
+`keyIdeas`, their lesson examples, and their recorded source cues. Persist it
+when storage is available, but keep it in memory if storage is temporarily down.
+
 ### LearnTube review-candidate gate
 
 ```text
-app source version == package version == 1.0.8
+app source version == package version == 1.0.9
 helper source/describe/archive/catalogue version == 1.0.4
 strict schema validation passes
 UI/core and Python Executa tests pass
@@ -1516,7 +1535,7 @@ three real Marketplace screenshots render
 exact review YouTube URL works on Local and Cloud Linux Agents
 notes, cards, quiz, roadmap, Mentor, storage, and PDF paths pass
 selected Agent shows helper loaded/running
-review candidate points at 1.0.8 before resubmission
+review candidate points at 1.0.9 before resubmission
 ```
 
 ## Troubleshooting

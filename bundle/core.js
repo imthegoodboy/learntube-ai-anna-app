@@ -356,6 +356,38 @@ export function lessonMatches(lesson, query) {
   return haystack.includes(needle);
 }
 
+const MENTOR_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "because", "by", "do", "does",
+  "for", "from", "how", "i", "in", "instead", "is", "it", "of", "on", "or",
+  "that", "the", "this", "to", "use", "uses", "what", "when", "where", "which",
+  "why", "with",
+]);
+
+function mentorTerms(value) {
+  return (String(value || "").toLowerCase().match(/[a-z0-9]+/g) || [])
+    .filter((term) => term.length > 1 && !MENTOR_STOP_WORDS.has(term));
+}
+
+export function groundedMentorFallback(lesson, question) {
+  const queryTerms = new Set(mentorTerms(question));
+  const ideas = Array.isArray(lesson?.keyIdeas) ? lesson.keyIdeas : [];
+  const ranked = ideas.map((idea, index) => {
+    const text = [idea.heading, idea.explanation, idea.example, idea.watchOut].join(" ");
+    const score = mentorTerms(text).reduce((total, term) => total + (queryTerms.has(term) ? 1 : 0), 0);
+    return { idea, index, score };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const best = ranked[0];
+  if (!best || best.score === 0) {
+    return "That is not covered in this lesson. Try asking about one of the key ideas shown in the lesson notes.";
+  }
+
+  const answer = [String(best.idea.explanation || "").trim()];
+  if (best.idea.example) answer.push(`Lesson example: ${String(best.idea.example).trim()}`);
+  if (best.idea.evidenceQuote) answer.push(`Source cue: “${String(best.idea.evidenceQuote).trim()}”`);
+  return answer.filter(Boolean).join("\n\n");
+}
+
 export function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
