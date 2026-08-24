@@ -42,7 +42,7 @@
       "tools": ["required:bundled:youtube-transcript"],
       "llm": ["complete"],
       "agent": {
-        "session": { "auto": true },
+        "session": { "auto": true, "fixed": { "client_ids": [] } },
         "tools": []
       },
       "storage": ["get", "set", "delete", "list"],

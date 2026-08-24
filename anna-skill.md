@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.9` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.10` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1339,7 +1339,7 @@ owner install confirmed at v1.0.0; review candidate submitted
 remote lifecycle at handoff: pending_review, is_published=false
 ```
 
-## LearnTube AI 1.0.9 Marketplace review recovery
+## LearnTube AI 1.0.10 Marketplace review recovery
 
 Anna Marketplace tested LearnTube AI `1.0.7` on 2026-08-24. Five of six
 scenarios passed, including source-grounded Mentor answers, but review was
@@ -1369,13 +1369,26 @@ Host API. Explicitly declare the submode under `ui.host_api`:
   "ui": {
     "host_api": {
       "agent": {
-        "session": { "auto": true },
+        "session": { "auto": true, "fixed": { "client_ids": [] } },
         "tools": []
       }
     }
   }
 }
 ```
+
+Declare both submode keys, even when the App uses only auto. A live `1.0.9`
+permission-save test proved that `{ "auto": true }` fixes the reviewer's
+original auto error but then fails with
+`Save failed: manifest does not declare agent.session.fixed`, because the
+immutable manifest normalizes an omitted `fixed` key to `null`. Version
+`1.0.10` therefore uses
+`{ "auto": true, "fixed": { "client_ids": [] } }`: auto and fixed are both
+explicit, and the permissions endpoint can reconcile both fields without
+guessing. The current schema does not accept `fixed: false`; it accepts `null`
+or a `{ "client_ids": [...] }` object. The empty list is the documented
+manifest form for any user-owned Executa, while `agent.tools: []` retains the
+App's declared Agent tool boundary.
 
 The production API rejected `agent-sessions` as an unknown top-level
 `host_capabilities` value even though CLI `0.1.49` strict validation accepted
@@ -1499,7 +1512,7 @@ Useful primary/source references:
 
 ### Blocker 5 — listing shows no version while Permissions shows `1.0.7`
 
-Keep `app.json` and `package.json` on the same new SemVer (`1.0.9`) and add a
+Keep `app.json` and `package.json` on the same new SemVer (`1.0.10`) and add a
 real changelog. The helper can have its own SemVer (`1.0.4`), but every helper
 surface—`executa.json`, `pyproject.toml`, runtime `describe`, archive names,
 release title, and binary URLs—must agree.
@@ -1532,24 +1545,25 @@ when storage is available, but keep it in memory if storage is temporarily down.
 ### LearnTube review-candidate gate
 
 ```text
-app source version == package version == 1.0.9
+app source version == package version == 1.0.10
 helper source/describe/archive/catalogue version == 1.0.4
 strict schema validation passes
 UI/core and Python Executa tests pass
 four native binary archives and SHA-256 files exist
 full `apps publish` resolves and freezes the bundled helper
-permission dialog saves without agent.session.auto error
+permission dialog saves without agent.session.auto or agent.session.fixed error
 three real Marketplace screenshots render
 exact review YouTube URL works on Local and Cloud Linux Agents
 notes, cards, quiz, roadmap, Mentor, storage, and PDF paths pass
 selected Agent shows helper loaded/running
-review candidate points at 1.0.9 before resubmission
+review candidate points at 1.0.10 before resubmission
 ```
 
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
 - `apps publish` rejects `unknown host_capabilities: ['agent-sessions']` after strict validation passed: remove that top-level string. Declare Agent access under `ui.host_api.agent.session` and treat the production server as authoritative; CLI `0.1.49` validates `host_capabilities` as arbitrary strings.
+- Permission Save moves from `manifest does not declare agent.session.auto` to `manifest does not declare agent.session.fixed`: declare both submodes under `ui.host_api.agent.session`; the current schema requires `fixed` to be `null` or `{ "client_ids": [...] }`, not a boolean. An omitted/`null` fixed mode was rejected by the live grant-save endpoint, so use the documented explicit object form and keep `agent.tools` scoped to the App's real needs.
 - `apps publish` rejects category `games`: use the current fixed taxonomy; for a game collection use `entertainment` and keep game concepts in tags.
 - Strict validation rejects a local realtime origin: `ui.bundle.external_origins` accepts HTTPS production origins, not `http://127.0.0.1`; keep local preview routing out of the production allowlist.
 - Cloudflare deploy warns that a workers.dev subdomain must be registered: inspect the account subdomain page, wait for DNS/TLS, and require a real `200` from the final HTTPS URL before wiring it into Anna. Do not assume upload output means the route is reachable.
