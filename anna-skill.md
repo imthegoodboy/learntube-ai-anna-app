@@ -1008,7 +1008,7 @@ anna-app apps versions learntube-study --account https://anna.partners --json
 
 The source commit for the Mentor/navigation release was `8ddfd6f` (`Improve Mentor chat and workspace navigation`). The exact repository state was clean before handoff.
 
-## Gaming Arena 1.0.0: UI-only app, realtime rooms, and listing assets
+## Gaming Arena 1.0.0–1.0.1: UI-only app, realtime rooms, and listing assets
 
 Gaming Arena was built as a completely separate app at
 `C:\Users\parth\Desktop\anna-gaming-arena`. Its source repository is
@@ -1865,6 +1865,194 @@ review_candidate_version = installed_version = latest_version = 1.0.11
 status remains pending_review; no public release before approval
 ```
 
+## Gaming Arena lesson — prove stateful UI apps with real clients
+
+Gaming Arena `1.0.0` passed installation and part of its local gameplay review,
+but Marketplace QA could not complete solo proof, bot turn/result proof, private
+rooms, random matchmaking, cross-browser restoration, or reconnect recovery.
+The review also found no screenshots and could not tell why a deterministic,
+Tool-less app belonged on Anna. Version `1.0.1` was treated as a full acceptance
+recovery rather than a cosmetic resubmission.
+
+### A Tool-less Anna app is valid, but its platform value must be explicit
+
+Do not add a dummy Executa or an unnecessary LLM call to make an app look more
+"Anna-native." Gaming Arena intentionally runs deterministic rules in its UI so
+every legal move, bot action, and result remains fast and reproducible. Its Anna
+integration is the user's private, cross-browser state layer:
+
+```json
+{
+  "permissions": ["storage.read", "storage.write"],
+  "required_executas": [],
+  "ui": {
+    "host_api": {
+      "storage": ["get", "set", "list", "delete"]
+    }
+  }
+}
+```
+
+Explain that architecture in the listing, README, permission copy, and first-use
+UI. For Gaming Arena, Anna Storage owns profile preferences, completed results,
+personal history, and the current resumable game. The shared room service owns
+cross-user coordination. This is clearer and safer than pretending the Anna Base
+Model produced deterministic game state.
+
+### Anna Storage is per user/app; unwrap its real response envelope
+
+Anna Storage follows the signed-in Anna user across browsers and devices, but it
+is not visible to another Anna user. Use it for private state only. The runtime
+can return either a direct storage object or a nested RPC envelope; normalize both
+before reading `value`:
+
+```js
+const result = await anna.storage.get({ key });
+const payload = result?.result && typeof result.result === "object"
+  ? result.result
+  : result;
+return payload?.exists === false ? null : payload?.value ?? null;
+```
+
+Persist the full serializable active snapshot: game id, mode, difficulty, engine
+state, result-recorded flag, room code/token, seat, players, status, and save time.
+Save after every meaningful local move, bot move, server state event, result, and
+room-presence change. Clear only when the user intentionally leaves or the result
+is deliberately dismissed.
+
+Do not fire overlapping last-write-wins saves without ordering them. A slower
+older write can otherwise overwrite a newer board. Serialize saves through one
+promise chain and expose a test-only persisted-move marker so the browser test can
+wait for the actual storage acknowledgement before reloading.
+
+### Cross-user multiplayer needs an authorized shared backend
+
+Anna Storage cannot synchronize two accounts. Use a real shared service with
+server-side authority. Gaming Arena uses one Cloudflare Durable Object per room,
+plus a matchmaking coordinator and public leaderboard. The room service:
+
+- issues an opaque reconnect token per seat;
+- validates expected move number, active turn, payload size, and legal actions;
+- never trusts the browser to decide a winner;
+- redacts hidden Battleship, Memory, and Quiz information per viewer;
+- makes result recording idempotent;
+- expires inactive rooms;
+- restores the exact board, move count, players, and active turn.
+
+Declare both production transports. `external_origins` alone is not enough when
+the UI also opens a socket:
+
+```json
+{
+  "ui": {
+    "bundle": {
+      "external_origins": ["https://example.workers.dev"]
+    },
+    "csp_overrides": {
+      "connect-src": [
+        "https://example.workers.dev",
+        "wss://example.workers.dev"
+      ]
+    }
+  }
+}
+```
+
+WebSockets can still be unavailable in a hosted environment. Keep an authenticated
+HTTP fallback for session polling, moves, and rematches. Poll with the seat token;
+deduplicate snapshots; and continue using the same server validation. A fallback
+must preserve correctness, not silently become a second rules engine.
+
+### Explicitly reserve a private-room seat before opening its socket
+
+The rejected room flow let both users display the same code while each behaved as
+player one. Do not treat a WebSocket connection as an implicit, best-effort join.
+Use an explicit `POST /rooms/:code/join` that atomically reserves player two and
+returns its seat token. Then connect/poll using that token. Test two different
+profiles and assert both clients display the same code, opposite seats, the same
+move log, and the same next turn.
+
+Use a unique connection id for every socket. On close, mark the seat offline only
+if the closing socket's id still matches the stored id. Otherwise a late close
+event from an old socket can mark a newly reconnected socket offline.
+
+### Matchmaking must be atomic across external awaits
+
+A global Durable Object is single-threaded, but requests can interleave while one
+handler awaits another Durable Object. The first Gaming Arena fix still split two
+simultaneous users because both requests read an empty queue, both awaited room
+creation, and both wrote different rooms.
+
+Use an atomic queue state machine:
+
+```text
+creating -> waiting -> matching -> deleted
+```
+
+Write `creating` to durable storage before awaiting room creation. A concurrent
+request waits and re-reads. Before awaiting seat reservation, change `waiting` to
+`matching`. Expire stuck operation claims, reject an abandoned waiting room when
+its owner is no longer present, and retain only a short creation grace period.
+This avoids both split rooms and stale-player matches.
+
+Cloudflare explicitly documents that non-storage I/O allows request interleaving;
+do not infer atomicity merely from the actor model. Prefer storage-backed claims
+and optimistic state transitions over holding `blockConcurrencyWhile()` across
+remote I/O.
+
+Reference:
+
+- https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
+
+### Test reviewer workflows, not component substitutes
+
+One browser plus a raw WebSocket is insufficient evidence for an Anna multiplayer
+App. Run two complete Anna harness clients with different user ids and independent
+storage. The Gaming Arena acceptance suite covers:
+
+1. All sixteen game rows, categories, modes, and bundled images.
+2. A real solo puzzle start and legal first action.
+3. User-first bot play, exactly one legal bot response, and visible final result.
+4. Two full clients joining one private room and exchanging ordered moves.
+5. Reloading one client and restoring the same room, board, move count, and turn.
+6. Two simultaneous full clients entering random matchmaking and receiving the
+   same room code.
+7. Preferences, history, completed records, and an unfinished game restored by a
+   second repository/runtime instance.
+8. Mobile navigation/board usability and zero serious/critical axe violations.
+
+Run room integration against the deployed origin, then run the full browser suite
+against that same origin. Repeat the simultaneous-matchmaking test several times;
+a single sequential API pass will not expose the interleaving race.
+
+### Marketplace screenshots are acceptance evidence
+
+Do not upload marketing placeholders. Capture current, real, English product
+states from the tested build. Gaming Arena `1.0.1` uses four screenshots: the
+sixteen-game catalog, a bot match with the current Ludo roll prominent, a live
+two-player room, and an Anna-restored in-progress game. Keep controls, status,
+room membership, and restoration messages legible at the Marketplace viewport.
+
+Small hierarchy bugs matter in a game. The review saw the previous Ludo roll as
+the largest value while the current roll was tiny. The corrected UI labels and
+enlarges `CURRENT ROLL`, keeps the die action secondary, and tells the player what
+to do next.
+
+### Gaming Arena `1.0.1` review-recovery gate
+
+```text
+19 game/platform tests pass
+4 deployed Durable Object integration tests pass
+6 full Playwright workflows pass; listing capture is opt-in
+3 consecutive simultaneous production matchmaking pairs pass
+strict Anna manifest validation passes
+production HTTPS, WSS, and HTTP fallback paths pass
+4 current English Marketplace screenshots exist
+source, package, listing, and immutable Anna versions match
+exact review candidate is installed before permission and smoke verification
+status remains pending_review until Anna approves it
+```
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
@@ -1876,6 +2064,10 @@ status remains pending_review; no public release before approval
 - The Developer app card says `v0.0.0` after publishing `1.0.0`: verify Version history, `apps versions`, and Installed Apps. The card label can be stale while the immutable and installed versions are correct.
 - Chrome cannot upload the listing logo (`fileChooser.setFiles` returns Not allowed): enable “Allow access to file URLs” for the ChatGPT browser extension, or preferably set `logo_file` and run `anna-app apps sync-meta` so the CLI uploads it to Anna CDN.
 - Online multiplayer was implemented with Anna Storage: redesign it. Anna Storage is per user/app; cross-user room state needs an authorized shared backend with server-side move validation.
+- Two simultaneous matchmaking users enter different rooms: the coordinator probably read an empty queue twice across an external room-creation await. Persist an atomic `creating -> waiting -> matching` claim before non-storage I/O and test concurrent, not sequential, requests.
+- A new matchmaking user joins an abandoned room: reject stale queue entries unless the owner is currently present, keep only a short creation grace window, and stop treating old polling timestamps as permanent connectivity.
+- Reconnect briefly succeeds and then shows the player offline: tag every socket with a connection id and ignore close events from superseded sockets.
+- The app restores an older move after refresh: serialize Anna Storage writes and wait for the latest save acknowledgement before reload.
 - Bundled handle is unresolved: ensure `app.json` contains the handle and the manifest uses `bundled:<same-handle>`.
 - UI invokes a dev tool in production: use the generated `window.__ANNA_TOOL_IDS__` map.
 - Runtime call is denied: align top-level `permissions`, `host_capabilities`, and `ui.host_api`, then let the user grant it.
