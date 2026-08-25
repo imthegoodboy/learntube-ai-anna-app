@@ -2104,11 +2104,30 @@ status remains pending_review until Anna approves it
 Do not collapse `review_candidate_version` and `installed_version` into one
 claim. On 2026-08-25, `apps submit-review` successfully pinned Gaming Arena
 `1.0.3` while `apps grants` still reported the local installed copy as `1.0.2`.
-The review submission was current, but the exact-version installed smoke was not.
-The CLI has no documented install-version verb; use the Developer page's install
-or update control, then require `apps grants installed_version == 1.0.3` before
-claiming the installed build was tested. Never use a version-history `Publish`
-button or `apps release` merely to update a developer test installation.
+The review submission was current, but the exact-version installed smoke was not
+yet current. The CLI has no documented install-version verb; use the Developer
+page's owner-only **Install** control. The live 2026-08-25 Developer frontend
+implements that control with `POST /api/v1/developer/apps/{app_id}/install` and
+explicitly documents that it works for drafts. Do not use the ordinary
+`POST /api/v1/apps/{app_id}/install` route for an unpublished draft; it returns
+`App 当前不可安装`. After the owner install, require:
+
+```text
+apps grants installed_version = 1.0.3
+apps grants latest_version = 1.0.3
+apps grants update_available = false
+apps status review_candidate_version = 1.0.3
+apps status status = pending_review
+```
+
+Gaming Arena's owner install returned `success: true`, no Executa failures, and
+`installed_version: 1.0.3`. A byte-for-byte production-bundle audit then matched
+all 21 local files to Anna version id 581: identical paths, SHA-256 values,
+individual sizes, file count, and total 282474-byte size. This is useful when a
+signed-in visual smoke is unavailable: it proves Anna is serving the exact bundle
+that passed local and production-backend E2E, but it does not replace an Anna-host
+UI smoke when the signed-in browser is available. Never use a version-history
+`Publish` button or `apps release` merely to update a developer test installation.
 
 ## Troubleshooting
 
