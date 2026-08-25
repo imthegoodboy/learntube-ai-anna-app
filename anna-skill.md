@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`–`1.0.3`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, retired-game migration, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1114,7 +1114,7 @@ enum returned by the CLI or Developer Console.
 
 ### Lesson 5 — bundle visual assets locally and store attribution
 
-Gaming Arena vendors one SVG for each of sixteen games plus its controller
+Gaming Arena vendors one SVG for each of fifteen games plus its controller
 logo. The source is https://game-icons.net/ and
 https://github.com/game-icons/icons. Imported artwork was recolored, square
 backgrounds were removed, and creator-by-creator attribution plus the upstream
@@ -2010,7 +2010,7 @@ One browser plus a raw WebSocket is insufficient evidence for an Anna multiplaye
 App. Run two complete Anna harness clients with different user ids and independent
 storage. The Gaming Arena acceptance suite covers:
 
-1. All sixteen game rows, categories, modes, and bundled images.
+1. All fifteen game rows, categories, modes, and bundled images.
 2. A real solo puzzle start and legal first action.
 3. User-first bot play, exactly one legal bot response, and visible final result.
 4. Two full clients joining one private room and exchanging ordered moves.
@@ -2028,7 +2028,7 @@ a single sequential API pass will not expose the interleaving race.
 ### Marketplace screenshots are acceptance evidence
 
 Do not upload marketing placeholders. Capture current, real, English product
-states from the tested build. Gaming Arena `1.0.3` uses four screenshots: the
+states from the tested build. Gaming Arena `1.0.4` uses four screenshots: the
 fifteen-game catalog, the flagship Chess bot match, a live two-player room, and
 an Anna-restored in-progress game. Keep controls, status, room membership, move
 notation, and restoration messages legible at the Marketplace viewport.
@@ -2073,6 +2073,16 @@ refer to the retired ID and clear an active saved snapshot if its engine no
 longer exists. Otherwise an old Anna Storage value can crash a newer release even
 though the removed game is no longer visible.
 
+Treat host-chat catalog claims as part of the product. After Gaming Arena removed
+Ludo, an unconstrained Anna launch response still claimed “16 real games” and
+invented Snake and Tetris. The fix was not another UI rewrite: enumerate the
+exact fifteen supported titles in `system_prompt_addendum`, tell Anna to open the
+App instead of simulating play, explicitly forbid retired/unsupported titles,
+and keep the no-invented-match/result rule. Add a unit test that derives current
+engine names from the catalog and requires every one to appear in the host prompt;
+also require the prompt to reject the old count and known retired names. This
+prevents the chat entrypoint and the real App from presenting different products.
+
 Durable Object HTTP endpoints must catch rule/presence rejections and return the
 App's JSON error envelope. An uncaught expected error becomes an HTML `500`, which
 breaks the client parser and hides the actionable message. Tests should read the
@@ -2083,10 +2093,10 @@ Reference:
 
 - https://github.com/jhlywa/chess.js
 
-### Gaming Arena `1.0.3` Chess-focused review-recovery gate
+### Gaming Arena `1.0.4` Chess-focused review-recovery gate
 
 ```text
-21 game/platform tests pass, including promotion and expert-bot mate selection
+22 game/platform tests pass, including catalog-prompt grounding, promotion, and expert-bot mate selection
 5 deployed Durable Object integration tests pass, including live Chess parity
 7 full Playwright workflows pass; listing capture is opt-in
 strict Anna manifest validation passes
@@ -2095,9 +2105,10 @@ production HTTPS, WSS, and HTTP fallback paths pass
 source, package, listing, and immutable Anna versions match
 exact review candidate is installed before permission and smoke verification
 installed grants are satisfied with storage get/set/list/delete and no Executa
-review candidate is `/anna-gaming-arena/1.0.3/`, version id is 581,
+review candidate is `/anna-gaming-arena/1.0.4/`, version id is 583,
 Anna sync is on, and the Chess board has 64 cells, 32 starting pieces, legal
 move highlighting, SAN history, capture trays, bot replies, and promotion choice
+installed Anna host smoke accepts e4, makes exactly one d5 bot reply, and records SAN
 status remains pending_review until Anna approves it
 ```
 
@@ -2113,20 +2124,23 @@ explicitly documents that it works for drafts. Do not use the ordinary
 `App 当前不可安装`. After the owner install, require:
 
 ```text
-apps grants installed_version = 1.0.3
-apps grants latest_version = 1.0.3
+apps grants installed_version = 1.0.4
+apps grants latest_version = 1.0.4
 apps grants update_available = false
-apps status review_candidate_version = 1.0.3
+apps status review_candidate_version = 1.0.4
 apps status status = pending_review
 ```
 
-Gaming Arena's owner install returned `success: true`, no Executa failures, and
-`installed_version: 1.0.3`. A byte-for-byte production-bundle audit then matched
-all 21 local files to Anna version id 581: identical paths, SHA-256 values,
-individual sizes, file count, and total 282474-byte size. This is useful when a
-signed-in visual smoke is unavailable: it proves Anna is serving the exact bundle
-that passed local and production-backend E2E, but it does not replace an Anna-host
-UI smoke when the signed-in browser is available. Never use a version-history
+Gaming Arena `1.0.4`'s owner install returned `success: true`, no Executa failures,
+and `installed_version: 1.0.4`. The immediately preceding signed-in Anna host
+smoke loaded the corrected Chess UI from the same byte-identical production bundle
+with 64 cells and 32 starting pieces, accepted `e4`, produced exactly one `d5`
+bot reply, and recorded both SAN moves. A byte-for-byte audit matched all 21 local
+files to the uploaded Anna bundle: identical paths, SHA-256 values, individual
+sizes, file count, and total 282474-byte size. Bundle comparison is useful when a
+signed-in visual smoke is unavailable, but it does not replace an Anna-host UI
+smoke when the signed-in browser is available; in this case both forms of evidence
+were collected. Never use a version-history
 `Publish` button or `apps release` merely to update a developer test installation.
 
 ## Troubleshooting
