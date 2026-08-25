@@ -2028,7 +2028,7 @@ a single sequential API pass will not expose the interleaving race.
 ### Marketplace screenshots are acceptance evidence
 
 Do not upload marketing placeholders. Capture current, real, English product
-states from the tested build. Gaming Arena `1.0.1` uses four screenshots: the
+states from the tested build. Gaming Arena `1.0.2` uses four screenshots: the
 sixteen-game catalog, a bot match with the current Ludo roll prominent, a live
 two-player room, and an Anna-restored in-progress game. Keep controls, status,
 room membership, and restoration messages legible at the Marketplace viewport.
@@ -2038,18 +2038,59 @@ the largest value while the current roll was tiny. The corrected UI labels and
 enlarges `CURRENT ROLL`, keeps the die action secondary, and tells the player what
 to do next.
 
-### Gaming Arena `1.0.1` review-recovery gate
+Inspect every generated PNG at original resolution. Automated selector checks did
+not catch a Ludo center badge positioned against the whole board or a board footer
+falling just below the 1180×800 listing capture. Constrain game art using both
+available width and `100vh`, rebuild the bundle before recapturing, and rerun the
+real gameplay test after any visual correction.
+
+### Rules libraries and shared-engine parity
+
+Use a maintained rules library where it materially reduces correctness risk.
+Gaming Arena bundles `chess.js` 1.4.0 for legal moves, castling, en passant,
+promotion, checkmate, stalemate, and standard draw detection. Record the exact
+library and license in source attribution; bundle it locally rather than loading a
+CDN at runtime.
+
+Do not choose a library only to satisfy a "uses libraries" claim. Ludo needed a
+small auditable engine that could run unchanged in the UI, bot loop, and Durable
+Object server. Its release gate checks the 52-square track, four tokens, safe
+squares, unsafe captures, five-square home lane, exact finishing roll, retained
+turn after a six, and all-four-home win condition. The UI test must render the
+full 15×15/225-cell board and move a real enabled pawn; element presence alone is
+not playability evidence.
+
+When a shared engine changes, rebuilding the Anna UI is insufficient. Redeploy
+the room Worker, run server integration against the final HTTPS origin, then run
+the full two-client UI suite against that same origin. Add a game-specific live
+test when the changed engine has online mode; Gaming Arena verifies that a live
+Ludo six releases a pawn, retains the turn, and restores for the other seat.
+
+Durable Object HTTP endpoints must catch rule/presence rejections and return the
+App's JSON error envelope. An uncaught expected error becomes an HTML `500`, which
+breaks the client parser and hides the actionable message. Tests should read the
+raw response first and report endpoint, status, content type, and a bounded body
+excerpt when JSON parsing fails.
+
+Reference:
+
+- https://github.com/jhlywa/chess.js
+
+### Gaming Arena `1.0.2` review-recovery gate
 
 ```text
-19 game/platform tests pass
-4 deployed Durable Object integration tests pass
-6 full Playwright workflows pass; listing capture is opt-in
+20 game/platform tests pass
+5 deployed Durable Object integration tests pass, including live Ludo parity
+7 full Playwright workflows pass; listing capture is opt-in
 3 consecutive simultaneous production matchmaking pairs pass
 strict Anna manifest validation passes
 production HTTPS, WSS, and HTTP fallback paths pass
 4 current English Marketplace screenshots exist
 source, package, listing, and immutable Anna versions match
 exact review candidate is installed before permission and smoke verification
+installed grants are satisfied with storage get/set/list/delete and no Executa
+fresh installed runtime path is `/anna-gaming-arena/1.0.2/`, version id is 580,
+Anna sync is on, and the installed Ludo board has 225 cells, 4 yards, and 8 pawns
 status remains pending_review until Anna approves it
 ```
 
@@ -2091,9 +2132,13 @@ status remains pending_review until Anna approves it
 - `apps publish --dry-run` describes the correct new slug/version but exits nonzero with the same Windows assertion: inspect the meaningful dry-run output, re-run strict validation, and do not perform the real upload until the identity gate is complete.
 - Developer listing fields appear blank immediately after first publish: wait for the record to load or use Refresh before editing; confirm the slug field before saving.
 - Developer page says “No working draft yet” after `apps publish`: verify the immutable version under Version history. This is expected for the guide's direct publish path.
+- Version history shows an unpublished version with a `Publish` action: do not use that control merely to test an update; it is a release/publication boundary. Pin the tested immutable version with the authorized CLI review flow, install it through the Developer app card, and verify `installed_version` with `apps grants`.
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
 - New version uploaded but install still reports the prior version: compare `latest_version.version` and `review_candidate_version`. A pending-review app's generic install can follow the old candidate; pin the intended version, verify status, reinstall, and verify `installed_version`.
+- `apps grants` shows the new version but an already-open App window still has the old bundle path: the App is `single_instance`, so the old iframe survived the install. Close that App window, open a fresh Anna session/window, and verify all three signals: the iframe path contains the intended semantic version, its signed token references the intended version id, and a feature unique to the new bundle is present. Do not diagnose a failed install from a stale singleton.
+- A shared game works locally but an online room still uses old rules: rebuild and deploy the realtime Worker as well as the Anna bundle, then run a game-specific production room test. Local UI success does not prove server rule parity.
+- A room action returns an HTML `500` instead of the App's JSON error: wrap Durable Object HTTP request handling, convert expected rule/presence errors to bounded JSON responses, and make the test parser include endpoint/status/content type when decoding fails.
 - `apps grants` reports `installed_executas: []` or an empty `executa_grants`: do not diagnose from that field alone for an unchanged developer-installed helper. Verify the exact Agent row, required-tool token scope, helper version, loaded/running state, and a real invocation.
 - App is installed but absent from the App Store: inspect `status`, `is_published`, and the candidate. `pending_review` with `is_published: false` is not public; wait for approval and release the approved exact version.
 - `executa '<tool-id>' is not deployed on the selected agent`: confirm the selected/default Agent is online, open Agent Details and locate the exact tool ID, verify the required native platform asset exists, verify `package_name` and `executable_name` both match the minted production tool ID, verify the installed app version, and inspect `apps grants`. Then distinguish installation from loading: a successful install with `agent_loaded: false` usually means the production handshake or describe manifest was rejected. If the app resolves a legacy bundled tool, correct or mint the app-specific Executa identity; if the Agent rejects the process, add the complete initialization contract. In either case, bump the immutable helper version, rebuild/upload every native artifact, raise `min_version` past broken intermediate versions, install the corrected app version, upgrade the exact helper on each Agent, and confirm a real invocation.
