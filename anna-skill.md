@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`–`1.0.3`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, retired-game migration, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -2028,19 +2028,20 @@ a single sequential API pass will not expose the interleaving race.
 ### Marketplace screenshots are acceptance evidence
 
 Do not upload marketing placeholders. Capture current, real, English product
-states from the tested build. Gaming Arena `1.0.2` uses four screenshots: the
-sixteen-game catalog, a bot match with the current Ludo roll prominent, a live
-two-player room, and an Anna-restored in-progress game. Keep controls, status,
-room membership, and restoration messages legible at the Marketplace viewport.
+states from the tested build. Gaming Arena `1.0.3` uses four screenshots: the
+fifteen-game catalog, the flagship Chess bot match, a live two-player room, and
+an Anna-restored in-progress game. Keep controls, status, room membership, move
+notation, and restoration messages legible at the Marketplace viewport.
 
-Small hierarchy bugs matter in a game. The review saw the previous Ludo roll as
-the largest value while the current roll was tiny. The corrected UI labels and
-enlarges `CURRENT ROLL`, keeps the die action secondary, and tells the player what
-to do next.
+Small hierarchy and scaling bugs matter in a game. Gaming Arena's first Chess
+capture made the Unicode pieces too large and allowed the board footer to fall
+below an 1180×800 listing viewport. The corrected board uses an explicit 8×8
+grid, a height-aware width clamp, restrained piece sizing, coordinates, legal
+move markers, last-move states, captured-piece strips, and a compact SAN history.
 
-Inspect every generated PNG at original resolution. Automated selector checks did
-not catch a Ludo center badge positioned against the whole board or a board footer
-falling just below the 1180×800 listing capture. Constrain game art using both
+Inspect every generated PNG at original resolution. Automated selector checks
+can prove that 64 cells and 32 pieces exist without proving that the board feels
+balanced or that secondary information is visible. Constrain game art using both
 available width and `100vh`, rebuild the bundle before recapturing, and rerun the
 real gameplay test after any visual correction.
 
@@ -2052,19 +2053,25 @@ promotion, checkmate, stalemate, and standard draw detection. Record the exact
 library and license in source attribution; bundle it locally rather than loading a
 CDN at runtime.
 
-Do not choose a library only to satisfy a "uses libraries" claim. Ludo needed a
-small auditable engine that could run unchanged in the UI, bot loop, and Durable
-Object server. Its release gate checks the 52-square track, four tokens, safe
-squares, unsafe captures, five-square home lane, exact finishing roll, retained
-turn after a six, and all-four-home win condition. The UI test must render the
-full 15×15/225-cell board and move a real enabled pawn; element presence alone is
-not playability evidence.
+Do not choose a library only to satisfy a "uses libraries" claim. Chess uses the
+same `chess.js` rules in the UI, bot loop, and Durable Object server. Test actual
+legal moves, exactly one bot reply, SAN history, captures, check/checkmate, draw
+reasons, and all four promotion choices; element presence alone is not
+playability evidence. Stronger bot levels can add deterministic scoring and
+reply-aware search without forking the underlying rules.
 
 When a shared engine changes, rebuilding the Anna UI is insufficient. Redeploy
 the room Worker, run server integration against the final HTTPS origin, then run
 the full two-client UI suite against that same origin. Add a game-specific live
-test when the changed engine has online mode; Gaming Arena verifies that a live
-Ludo six releases a pawn, retains the turn, and restores for the other seat.
+test when the changed engine has online mode; Gaming Arena verifies ordered live
+Chess moves, notation, active-turn parity, and state restoration for both seats.
+
+When retiring a catalog item, remove it as a complete product migration: catalog
+metadata, runtime engine maps, routes, controls, rules, styles, icons, listing
+copy, screenshots, documentation, and tests. Also filter historical results that
+refer to the retired ID and clear an active saved snapshot if its engine no
+longer exists. Otherwise an old Anna Storage value can crash a newer release even
+though the removed game is no longer visible.
 
 Durable Object HTTP endpoints must catch rule/presence rejections and return the
 App's JSON error envelope. An uncaught expected error becomes an HTML `500`, which
@@ -2076,23 +2083,32 @@ Reference:
 
 - https://github.com/jhlywa/chess.js
 
-### Gaming Arena `1.0.2` review-recovery gate
+### Gaming Arena `1.0.3` Chess-focused review-recovery gate
 
 ```text
-20 game/platform tests pass
-5 deployed Durable Object integration tests pass, including live Ludo parity
+21 game/platform tests pass, including promotion and expert-bot mate selection
+5 deployed Durable Object integration tests pass, including live Chess parity
 7 full Playwright workflows pass; listing capture is opt-in
-3 consecutive simultaneous production matchmaking pairs pass
 strict Anna manifest validation passes
 production HTTPS, WSS, and HTTP fallback paths pass
 4 current English Marketplace screenshots exist
 source, package, listing, and immutable Anna versions match
 exact review candidate is installed before permission and smoke verification
 installed grants are satisfied with storage get/set/list/delete and no Executa
-fresh installed runtime path is `/anna-gaming-arena/1.0.2/`, version id is 580,
-Anna sync is on, and the installed Ludo board has 225 cells, 4 yards, and 8 pawns
+review candidate is `/anna-gaming-arena/1.0.3/`, version id is 581,
+Anna sync is on, and the Chess board has 64 cells, 32 starting pieces, legal
+move highlighting, SAN history, capture trays, bot replies, and promotion choice
 status remains pending_review until Anna approves it
 ```
+
+Do not collapse `review_candidate_version` and `installed_version` into one
+claim. On 2026-08-25, `apps submit-review` successfully pinned Gaming Arena
+`1.0.3` while `apps grants` still reported the local installed copy as `1.0.2`.
+The review submission was current, but the exact-version installed smoke was not.
+The CLI has no documented install-version verb; use the Developer page's install
+or update control, then require `apps grants installed_version == 1.0.3` before
+claiming the installed build was tested. Never use a version-history `Publish`
+button or `apps release` merely to update a developer test installation.
 
 ## Troubleshooting
 
