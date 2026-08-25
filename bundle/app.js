@@ -588,6 +588,11 @@ async function resolveYouTubeSource(url) {
     const error = payload?.message || "Captions could not be retrieved for this video.";
     throw new Error(`${error} You can still use this lesson by pasting its transcript.`);
   }
+  const captionCount = Number(payload.segmentCount || 0);
+  updateBusy(
+    captionCount > 0 ? `Captions ready · ${captionCount.toLocaleString()} segments` : "Captions ready · building your lesson",
+    32,
+  );
   return {
     type: "youtube",
     url,

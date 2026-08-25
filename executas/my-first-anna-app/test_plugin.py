@@ -69,6 +69,35 @@ def test_transcript_result_formats_timestamped_evidence() -> None:
     assert "[00:04]" in result["transcript"]
 
 
+def test_marketplace_review_video_uses_the_production_transcript_path() -> None:
+    transcript = {
+        "transcript": "[00:00] Build and publish an Anna app from a working local project.",
+        "language": "English",
+        "languageCode": "en",
+        "isGenerated": False,
+        "durationSeconds": 4.0,
+        "segmentCount": 1,
+        "truncated": False,
+        "retrievalMode": "youtube_captions",
+    }
+    with patch.object(plugin, "_fetch_transcript", return_value=transcript), patch.object(
+        plugin,
+        "_metadata",
+        return_value={
+            "title": "Build & Publish Your First Anna App: Step by Step",
+            "channel": "Anna",
+        },
+    ):
+        result = plugin.transcript_result(
+            {"url": "https://www.youtube.com/watch?v=97BK06JjDmE", "languages": ["en"]}
+        )
+
+    assert result["ok"] is True
+    assert result["videoId"] == "97BK06JjDmE"
+    assert result["retrievalMode"] == "youtube_captions"
+    assert result["segmentCount"] == 1
+
+
 def test_invoke_returns_dispatcher_envelope_for_expected_errors() -> None:
     response = plugin.invoke(plugin.TOOL_METHOD, {"url": "not a youtube url"})
     assert response["success"] is True

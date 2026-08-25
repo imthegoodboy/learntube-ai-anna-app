@@ -22,6 +22,13 @@ test("extractYouTubeId accepts supported URL forms and rejects other hosts", () 
   assert.equal(extractYouTubeId("https://example.com/watch?v=UF8uR6Z6KLc"), null);
 });
 
+test("extractYouTubeId accepts the Marketplace review video", () => {
+  assert.equal(
+    extractYouTubeId("https://www.youtube.com/watch?v=97BK06JjDmE"),
+    "97BK06JjDmE",
+  );
+});
+
 test("parseStructuredJson tolerates a fenced model response", () => {
   assert.deepEqual(parseStructuredJson("```json\n{\"ok\":true}\n```"), { ok: true });
 });
