@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.10` production and Marketplace-review experience through 2026-08-24, Gaming Arena `1.0.0`, and Decision Room AI `1.0.0` local/live verification from 2026-08-24: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -612,7 +612,7 @@ Do not stop at the success message. The status verification must show:
 }
 ```
 
-Versions created after submission are not automatically part of that review round. Re-run `apps submit-review` to pin the newest intended version, then verify `review_candidate_version` again.
+Versions created after submission are not automatically part of that review round. Use the currently supported review-submission control to pin the newest intended version, then verify `review_candidate_version` again. Do not assume the upload changed the active candidate.
 
 ### Update installation can stay on the previous review candidate
 
@@ -645,6 +645,52 @@ For an already-under-review app update:
 5. Verify `review_candidate_version` now equals the intended version.
 6. Install again and verify the installation response or Installed Apps Permissions page reports the exact version.
 7. Run `apps grants` and the real critical workflow before treating the version as tested.
+
+SkillQuest exposed an additional current-UI path when the parent app remained
+`pending_review`: Developer → App → Settings → **Submit now**, labelled “Send the
+latest draft to OpenAnna admins for approval.” With explicit submission authority,
+that control changed the candidate from `1.0.0` to immutable version `1.1.1` even
+though the CLI's documented state transition is DRAFT/REJECTED → PENDING_REVIEW.
+The required verification was:
+
+```text
+before Submit now:
+  latest_version = 1.1.1
+  review_candidate_version = 1.0.0
+  generic Install = 1.0.0
+
+after Submit now:
+  status = pending_review
+  review_candidate_version = 1.1.1
+  generic Install = 1.1.1
+  apps grants installed_version = 1.1.1
+  apps grants satisfied = true
+```
+
+Do not substitute the Versions-tab **Publish** button for this action. In the
+observed console it was the release/release-review path and was unavailable while
+the parent app was still awaiting Marketplace approval. Do not run `apps release`
+until Anna approves the exact candidate.
+
+### Installed app launcher can leave a stale window
+
+Anna's dashboard app launcher is itself an app window. A stale launcher or chat
+session can make a correct launch look blank or can leave the app window behind
+another window. Use a clean dashboard session, open **Apps (pinned)**, search the
+exact installed display name, and press Enter once. Then verify the mounted app
+iframe/path contains the exact slug and immutable version, for example:
+
+```text
+/anna-apps/<owner>/skillquest-ai/1.1.1/index.html
+```
+
+When duplicate developer and Marketplace apps share a display name, an Anna chat
+instruction can invoke the wrong numeric app ID even if the mention chip has the
+right logo. Do not treat a model statement such as “I opened the app” as runtime
+evidence. Launch from Installed Apps/Apps, verify the exact runtime path, and test
+inside that window. For SkillQuest `1.1.1`, the verified installed run generated a
+live path, reviewed real TypeScript/compiler evidence, awarded 100 XP, grounded the
+Coach response without inventing missing context, and persisted two worlds.
 
 CLI `0.1.49` has no public `apps install` subcommand. Use the current Developer UI for installation rather than scripting undocumented endpoints in a reusable workflow. An automated/private install used during debugging must never print the stored PAT and must still be verified with the exact installed version.
 
@@ -1575,6 +1621,250 @@ selected Agent shows helper loaded/running
 review candidate points at 1.0.10 before resubmission
 ```
 
+## SkillQuest lesson — functional pass can still fail Marketplace product review
+
+SkillQuest AI `1.0.0` passed all five functional scenarios and the App Security
+Check, yet Anna returned **Changes Required** because users could not understand
+the core value quickly enough. Treat functional QA and product review as two
+separate gates.
+
+### First-use value gate
+
+Before showing worlds, quests, missions, stages, abilities, XP, streaks, or
+badges, the first viewport must explain the actual job in plain language:
+
+```text
+Tell Anna what you want to learn
+  -> get a personalized practice path
+  -> complete real tasks
+  -> receive feedback grounded in your work
+```
+
+Gamification can remain as a secondary motivation layer. It must not be the
+first concept users need to decode. In screenshots and tests, verify the first
+`h1`, deck, primary CTA, and supporting flow all communicate the core job before
+game vocabulary.
+
+### AI-first onboarding gate
+
+Do not make an AI learning product begin with a multi-step questionnaire. Use
+one required natural-language goal and let the model infer the first path.
+Expose level, schedule, preferred format, and source material as optional
+progressive disclosure with sensible defaults. One required field and one
+primary CTA should be enough to reach the first useful result.
+
+Keep old stored records compatible by normalizing legacy `skill`,
+`targetOutcome`, and `motivation` fields into the new `goal` contract. Version
+the stored object even if the storage key remains stable.
+
+### Real-material grounding gate
+
+Task assignment plus after-the-fact scoring is not enough differentiation from
+general chat. Let the learner provide real code, docs, notes, output, or a work
+sample and use that same evidence across planning, task review, and coaching.
+
+For a static Anna UI, a browser-local text/code import can avoid unnecessary
+upload permissions:
+
+- allow only intentional text/code extensions;
+- reject files over a small bounded size;
+- read with `File.text()` inside the app;
+- normalize and cap persisted text (SkillQuest uses 5,000 characters per
+  source/work field);
+- warn against secrets and sensitive personal data;
+- include the saved material in the smallest sufficient LLM context;
+- treat all learner material as untrusted data, never as model instructions;
+- require reviews to reference a concrete element from supplied work when one
+  exists;
+- explicitly say when saved context does not cover the question.
+
+If the product needs PDF, DOCX, binary, image, or repository ingestion, use the
+appropriate declared Host API or a narrowly scoped Executa instead of silently
+pretending the browser parsed it.
+
+### One-task-per-screen gate
+
+The original Mission route gave Field Guide, Brief, Evidence, Compass, Ability,
+and XP similar visual weight. The corrected contract is:
+
+1. a persistent `Home / Practice path / Current task` breadcrumb;
+2. one prominent “Do this now” task with ordered steps;
+3. learning theory collapsed under “Why this task matters”;
+4. one primary “Review my work” action;
+5. real work/evidence inputs ahead of reflection and success-check details;
+6. time and stage visible in a quiet side rail;
+7. XP and ability metadata behind secondary disclosure.
+
+Test the breadcrumb and primary CTA on every nested route. Fixed Anna chrome can
+intercept controls that automation scrolls directly under it; capture a real
+user route at the manifest default size and minimum size, and keep route-change
+scroll reset explicit.
+
+### Review evidence and listing gate
+
+Screenshots are not decoration; they are product-review evidence. For a major
+review recovery, upload fresh real app states that prove the requested changes:
+
+- first screen with the simple value loop;
+- one-goal onboarding with optional grounding material;
+- a task screen that accepts real work for grounded review;
+- grounded Coach context on mobile when useful.
+
+Capture only `iframe#app`, disable smooth scrolling before each capture, inspect
+every PNG at original resolution, and never upload a frame with clipped headers,
+RPC logs, test chrome, secrets, or stale terminology. Keep the local ordered
+paths in `app.json`, rebuild, and run `apps sync-meta` or the current guide's
+equivalent after the immutable version exists.
+
+When QA says Tool Bundling or Permission Configuration is **Needs
+Confirmation** because evidence was not captured, do not invent a permission or
+Executa. For a UI-only app, prove `required_executas` and `optional_executas`
+are empty, prove the installed permission dialog saves, and include screenshots
+or CLI grant evidence. Add `agent.session` only when the app actually uses an
+Agent; least privilege still applies.
+
+SkillQuest `1.1.0` local acceptance gate:
+
+```text
+app.json == package.json == package-lock.json version
+production bundle builds
+15 unit/platform tests pass
+strict manifest validation passes
+5 desktop Anna-harness workflows pass
+axe accessibility scans pass
+390px manifest view has no horizontal overflow
+fresh listing screenshots show first-use, onboarding, real-work review, and Coach
+live Anna model creates the path, evaluates real work, and replies without fallback
+no unexpected browser console errors
+```
+
+Do not submit or release merely because the functional scenarios pass. Re-read
+the written Marketplace feedback, map every sentence to a visible change plus a
+test/evidence artifact, install the exact immutable candidate, and only then
+resubmit.
+
+## LearnTube lesson — recover a rejected version without guessing
+
+LearnTube AI `1.0.7` received four concrete Marketplace findings: permission
+save failure, a bundled-tool/listing mismatch, missing screenshots, and a direct
+YouTube-link failure. The repaired source existed before the review email was
+fully re-audited, but source correctness alone was not enough. The complete
+recovery required checking the exact installed version, immutable manifest,
+Executa metadata, binary artifacts, Agent runtime state, and reviewer input.
+
+### Separate YouTube authorization from Cloud-IP blocking
+
+Public captions do not automatically require OAuth or a YouTube API key. First
+run the reviewer URL through the Executa itself and record the result. For the
+LearnTube review URL `https://www.youtube.com/watch?v=97BK06JjDmE`, the verified
+2026-08-25 result was:
+
+```text
+ok = true
+retrievalMode = youtube_captions
+segmentCount = 136
+transcriptChars = 6186
+languageCode = en
+```
+
+YouTube frequently blocks datacenter IPs while allowing the same public caption
+track elsewhere. The production helper therefore tries the official caption
+track first, then a bounded keyless caption-edge route for block/network errors.
+OAuth is not a substitute for diagnosing an IP block. Keep the pasted-transcript
+path as a graceful fallback, but do not claim the URL capability passes until
+the exact reviewer URL reaches a generated workspace.
+
+### Audit every deployment surface
+
+For a bundled binary Executa, verify all of these independently:
+
+1. Developer tool row version and publish/visibility state.
+2. `manifest_cache.version`, tool method, and parameter shape.
+3. Every platform URL, SHA-256, size, archive format, and entrypoint.
+4. Local artifact SHA-256 against the platform metadata.
+5. Immutable App version manifest after bundled-handle resolution.
+6. Agent-installed version, install result, loaded/running flags, and tool count.
+7. Runtime behavior using the exact Marketplace test input.
+
+LearnTube `1.0.11` retained helper `1.0.4` because the Executa code and binaries
+did not change. The remote/local SHA-256 pairs matched for darwin-arm64,
+darwin-x86_64, linux-x86_64, and windows-x86_64. The Cloud Agent reported
+`is_installed=true`, `agent_loaded=true`, `agent_running=true`,
+`agent_version=1.0.4`, and one tool. Do not create a new helper version merely
+because the App patch version changed.
+
+Some current Developer responses expose `frozen_executas` as null even though
+the immutable manifest has already resolved both `required_executas[].tool_id`
+and `ui.host_api.tools[]` to the formal tool ID. Treat the resolved immutable
+manifest plus matching Agent/runtime behavior as the useful evidence. Document
+the null metadata and avoid destructive tool recreation.
+
+### Pending review pins installation to the old candidate
+
+`anna-app apps publish` created immutable LearnTube `1.0.11` and uploaded its
+bundle/screenshots, but the parent remained `pending_review` with candidate
+`1.0.10`. The normal developer install endpoint therefore reinstalled `1.0.10`
+even though `1.0.11` was the newest version. The correct sequence was:
+
+```text
+apps publish -> immutable 1.0.11, candidate still 1.0.10
+apps submit-review -> candidate becomes 1.0.11
+developer install -> installed_version becomes 1.0.11
+apps grants -> latest_version 1.0.11, update_available false
+```
+
+Always read the install response. `success: true` is not enough if
+`installed_version` is stale. Re-run the supported review-submission control,
+verify `review_candidate_version`, install again, and only then run acceptance.
+
+### Permission-save acceptance is a write test
+
+Manifest inspection alone does not prove the permission dialog can save. For
+LearnTube `1.0.11`, verify the installed manifest declares both:
+
+```json
+{
+  "agent": {
+    "session": {
+      "auto": true,
+      "fixed": { "client_ids": [] }
+    },
+    "tools": []
+  }
+}
+```
+
+Then save the same grants through the installed-app grants surface and confirm
+the response preserves `llm.complete`, `agent.auto`, and `agent.fixed`. Finish
+with `apps grants`; it must show `satisfied: true`, `missing: []`, the exact
+installed version, and no update available. A prior version's successful save
+does not prove the newly installed candidate.
+
+### Cloud Agent wake overlays are not tool failures
+
+A suspended Cloud Agent can show “Waking your Cloud Agent” or “Almost there”
+before the app can invoke anything. Do not rewrite the Executa solely from that
+overlay. Check the Agent plugin-status endpoint or Details view. If the helper is
+installed, already loaded, running, and at the expected version, wake/retry the
+Agent and continue the real flow. Diagnose a caption error only after the tool
+call actually occurs.
+
+LearnTube `1.0.11` final gate:
+
+```text
+15 frontend/platform tests pass
+9 Executa tests pass
+strict validation passes
+exact review URL completes tools.invoke in the Anna harness
+mock Anna generation reaches Notes and persists the workspace
+3 Marketplace screenshots are present on the 1.0.11 listing
+immutable manifest resolves the required helper and both Agent submodes
+permission save succeeds for installed 1.0.11
+Cloud Agent helper 1.0.4 is loaded and running
+review_candidate_version = installed_version = latest_version = 1.0.11
+status remains pending_review; no public release before approval
+```
+
 ## Troubleshooting
 
 - `validate` rejects an unknown field: remove it and use the exact current schema; do not guess.
@@ -1631,4 +1921,4 @@ review candidate points at 1.0.10 before resubmission
 - [Game-Icons project](https://game-icons.net/)
 - [Game-Icons source and license](https://github.com/game-icons/icons)
 
-Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-24. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
+Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-25. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
