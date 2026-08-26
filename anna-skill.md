@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`–`1.0.1`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-26: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, bounded Anna Storage sharding, dev-harness identity drift, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`–`1.0.1`, SkillQuest AI `1.0.0`–`1.1.1`, and Casefile Zero `1.0.1` review hardening through 2026-08-26: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, bounded Anna Storage sharding, serialized game-state recovery, dev-harness identity drift, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -2255,6 +2255,118 @@ signed-in visual smoke is unavailable, but it does not replace an Anna-host UI
 smoke when the signed-in browser is available; in this case both forms of evidence
 were collected. Never use a version-history
 `Publish` button or `apps release` merely to update a developer test installation.
+
+## Casefile Zero 1.0.1 — detective-game release gate
+
+Casefile Zero is a UI-only Anna App (`casefile-zero`, app id `224`) with no
+Executa. Its Anna value is the interactive, deterministic case UI plus optional
+grounded suspect dialogue through the Host LLM and profile/active-case recovery
+through Anna Storage. The four fictional cases, six clues per case, four
+suspects, evidence connections, timeline, accusation scoring, soundscape, and
+archive are local rule logic; they do not need a model key or a third-party
+service. Do not invent a Tool or permission merely to make a game appear more
+Anna-specific.
+
+### Release lessons
+
+- A UI-only app still needs the complete permission declaration if its dialog is
+  expected to save. Declare both nested Agent session submodes, even when the
+  app has no Agent tools:
+
+  ```json
+  "ui": {
+    "host_api": {
+      "llm": ["complete"],
+      "storage": ["get", "set", "delete", "list"],
+      "window": ["set_title", "ready"],
+      "agent": {
+        "session": { "auto": true, "fixed": { "client_ids": [] } },
+        "tools": []
+      }
+    }
+  }
+  ```
+
+  Do not add `agent-sessions` to top-level `host_capabilities`; production
+  rejects it. `fixed: false` is also invalid. Install the exact immutable
+  candidate, open Permissions, click Save all permissions, then verify
+  `apps grants` reports both session modes, `satisfied=true`, and `missing=[]`.
+
+- Listing metadata is part of the product. Keep three or more real English
+  screenshots in the repository and point `app.json.screenshots` at them. For
+  Casefile Zero, the checked states are `bundle/listing/desk.png` (first use),
+  `board.png` (evidence board), and `result.png` (closed case). Capture the
+  product surface after reveal animations settle; never upload a harness shell,
+  blank iframe, or a clipped modal. Run `anna-app apps sync-meta` after publish
+  if the CDN URLs are not visible in Listing.
+
+- Persist state as a bounded, explicit schema. Anna Storage has an observed
+  per-value JSON limit of 262144 bytes. Casefile keeps only `profile` and one
+  `active` game key, but `normalizeGame` must strip unknown fields, cap suspect
+  conversation to the last 20 messages, cap each message to 520 characters,
+  limit interviews/deductions/evidence, and sanitize solved records before
+  hydration. Serialize writes through one promise queue; otherwise a rapid
+  clue/interview/accusation sequence can let an older acknowledgement overwrite
+  the newest state. Always await the save before changing route.
+
+- A saved active game does not have to reopen on the exact previous route. A
+  correct recovery assertion is that the desk shows **Resume investigation**
+  and the same case, and that opening it restores the discovered clues and active
+  turn/context. Test both standalone localStorage fallback and the Anna dev
+  harness; use `--storage aps` for a real account persistence gate only with an
+  isolated user/account and explicit authorization.
+
+- Deterministic game rules are easier to review when they have no hidden model
+  dependency. Test every case through discovery → two interviews → valid
+  evidence connection → accusation → result, and prove invalid links/incomplete
+  accusations cannot close a case. Optional custom suspect questions should use
+  a short, dossier-grounded Host LLM prompt and a safe deterministic answer when
+  Anna is offline; never let the model reveal or mutate the official solution.
+
+- Keep first-use visual evidence and mobile checks in the release gate. The
+  Casefile browser smoke covers desk → briefing → scene → six clues → reload
+  recovery → standard/custom interview → evidence board → accusation → result,
+  plus a 390px horizontal-overflow check. The Anna harness smoke covers the real
+  SDK connection, hosted iframe interaction, and recovery after the harness
+  reloads. The scripts live in `casefile-zero/scripts/` and use a local
+  Playwright package via `PLAYWRIGHT_MODULE`; they are intentionally separate
+  from the dependency-free Node rule tests.
+
+- Version all surfaces together. Bump `app.json`, `package.json`, and
+  `package-lock.json`; run `npm test` and `anna-app validate --strict`; publish a
+  new immutable version; install that exact version; verify grants and the
+  listing; then `apps submit-review casefile-zero`. Do not use Version history's
+  **Publish** button or `apps release` for a review candidate. A pending-review
+  app with `is_published=false` is not public until Anna approves it.
+
+### Casefile 1.0.1 acceptance commands
+
+```powershell
+$ANNA_HOST = "https://anna.partners"
+cd C:\Users\parth\Desktop\my-first-anna-app\casefile-zero
+npm test
+anna-app validate --strict
+
+# Start a direct static preview on 5188 for browser smoke (bundle only).
+py -3 -m http.server 5188 --directory bundle
+$PLAYWRIGHT_MODULE = "<local Playwright package directory>"
+$env:PLAYWRIGHT_MODULE = $PLAYWRIGHT_MODULE
+node scripts/browser-smoke.mjs
+
+# In another terminal, run the real Anna SDK harness.
+anna-app dev --port 5187 --no-llm
+node scripts/harness-smoke.mjs
+
+anna-app apps publish --account $ANNA_HOST --json
+anna-app apps status casefile-zero --account $ANNA_HOST --json
+anna-app apps versions casefile-zero --account $ANNA_HOST --json
+anna-app apps grants casefile-zero --account $ANNA_HOST --json
+anna-app apps submit-review casefile-zero --account $ANNA_HOST --json
+```
+
+At handoff, record the immutable version id/content hash, review candidate, exact
+installed version, grants, screenshot CDN URLs, and the smoke outputs. Never
+claim “published” when the app is only installed or pending review.
 
 ## Troubleshooting
 
