@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience through 2026-08-25, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-25: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`–`1.0.1`, and SkillQuest AI `1.0.0`–`1.1.1` review recovery through 2026-08-26: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, bounded Anna Storage sharding, dev-harness identity drift, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -1208,7 +1208,7 @@ Anna version 1.0.0 uploaded and installed
 Anna review candidate 1.0.0 submitted
 ```
 
-## Decision Room AI 1.0.0: live LLM budgets and deterministic continuity
+## Decision Room AI 1.0.0–1.0.1: live LLM, storage, identity, and review hardening
 
 Decision Room AI was built as a separate UI-only app at
 `C:\Users\parth\Desktop\anna-decision-room-ai`. It uses `anna.llm.complete`,
@@ -1245,7 +1245,7 @@ Production rules:
 Decision Room's live gate starts the current harness with:
 
 ```powershell
-anna-app dev --port 5197 --llm-account https://anna.partners
+anna-app dev --port 5197 --slug decision-room-ai --llm-app-slug decision-room-ai --storage aps --llm-account https://anna.partners
 ```
 
 It creates a real room, runs structured Challenger analysis, verifies the result
@@ -1288,16 +1288,129 @@ The final ACL should name only the actual user with `(R,W)`. Remove accidental
 machine/principal entries explicitly, then prove `anna-app dev` can create a
 session. Do not weaken the ACL merely to make the POSIX-style doctor line green.
 
+### Lesson 5 — the dev harness can silently rewrite identity to the folder slug
+
+Decision Room's immutable identity is `decision-room-ai`, app id `218`, but its
+folder is named `anna-decision-room-ai`. Because `manifest.json` does not carry
+listing identity, an unqualified `anna-app dev` used the folder name, registered
+or reused the abandoned draft app `anna-decision-room-ai` (app id `216`), and
+rewrote `.anna/dev-app.json` after an earlier manual correction. The UI and LLM
+tests could still pass, so a green harness alone did not prove the right app was
+under test.
+
+Always pass the intended identity explicitly when folder and app slugs differ:
+
+```powershell
+anna-app dev `
+  --slug decision-room-ai `
+  --llm-app-slug decision-room-ai `
+  --storage aps `
+  --llm-account https://anna.partners
+```
+
+Add a preflight script that compares `app.json`, `.anna/app.json`, and
+`.anna/dev-app.json`: source slug, cached slugs, host, and app ids must agree.
+Run it before and after browser tests because the harness itself can rewrite the
+dev cache. If CI has no ignored `.anna` directory, allow the cache check to skip
+while still validating the source slug/version.
+
+### Lesson 6 — one Anna Storage value is not a production database
+
+Decision Room originally stored up to 24 complete rooms—evidence matrices,
+analyses, and Coach history—in one key. Ordinary tests passed, but the declared
+maximum could exceed Anna's observed `262144`-byte JSON value limit. A truthful
+sync badge is not proof that a realistically large library will persist.
+
+Use a versioned shard layout:
+
+```text
+decision-room:v2:index
+decision-room:v2:decision:<id>:core
+decision-room:v2:decision:<id>:analyses
+decision-room:v2:decision:<id>:coach
+```
+
+Keep each serialized value below a conservative budget (`220000` bytes here),
+write changed shards before the index, fingerprint unchanged shards to avoid
+rewriting every room on each keystroke, and serialize overlapping saves so a
+slower old write cannot overwrite newer text. Load the legacy single-key value,
+write all v2 shards, verify success, then delete the legacy key. Clear and delete
+must remove every owned shard as well as both indexes.
+
+Test the storage adapter with a fake Host API using near-maximum content. Assert
+every value stays below `262144` bytes, a new platform instance restores the
+same room, legacy migration loses nothing, and two overlapping saves restore the
+newest edit. Then run the live Playwright gate with `--storage aps`, not the
+harness's default in-memory `legacy` mode; clean up only the temporary test room.
+
+### Lesson 7 — make one question enough and prove the CTA is above the fold
+
+Decision Room's original onboarding gave templates, a large context field,
+depth selection, and deadline similar visual priority. The primary **Enter the
+room** action fell below the initial `1200×820` Anna view—the same first-use
+failure pattern that hurt SkillQuest.
+
+Keep the core decision question visible, default to a quick room, and put context,
+deadline, and deep mode in an accessible collapsed disclosure. State Anna's role
+in one sentence: compare options, challenge evidence, and record a revisitable
+decision. Add a Playwright assertion that the button's bottom edge is inside the
+iframe's default viewport; `toBeVisible()` alone can pass after automatic scroll.
+
+### Lesson 8 — proactively use the review-safe permission shape
+
+A UI-only app using `llm.complete` can receive the same permission-dialog failure
+as an Executa-backed app if it omits the session declaration. Decision Room
+`1.0.1` uses:
+
+```json
+"agent": {
+  "session": {
+    "auto": true,
+    "fixed": { "client_ids": [] }
+  },
+  "tools": []
+}
+```
+
+Do not add `agent-sessions` to top-level `host_capabilities`. After installing
+the exact version, require `apps grants` to report both
+`manifest_host_api.agent.session.auto=true` and `fixed=true`, an empty app tool
+surface, `satisfied=true`, and `missing=[]`.
+
+### Lesson 9 — generic developer install follows the pinned review candidate
+
+`apps publish` created immutable Decision Room `1.0.1` (version id `584`) while
+the app remained `pending_review` with candidate and installed version `1.0.0`.
+Calling `POST /api/v1/developer/apps/218/install`, even with a body requesting
+`1.0.1`, still installed `1.0.0`; the version field was ignored because the owner
+install follows `review_candidate_version`.
+
+The reliable sequence was:
+
+```text
+apps publish 1.0.1 -> latest immutable version 1.0.1, candidate still 1.0.0
+apps submit-review decision-room-ai -> candidate becomes 1.0.1
+developer owner install -> installed version becomes 1.0.1
+apps status + apps versions + apps grants -> all exact and grants satisfied
+```
+
+The Developer Versions table's **Publish** button is a public release boundary,
+not an install/test control. Do not click it before review approval.
+
 ### Decision Room verification gate
 
 ```text
-11 deterministic unit tests passed
-5 Anna-harness Playwright workflows passed
-1 real Anna LLM analysis + Coach workflow passed
+17 deterministic unit/config/storage tests passed
+7 Anna-harness Playwright workflows passed
+1 real Anna LLM analysis + Coach + APS workflow passed
 axe accessibility scans passed
 desktop and 390px visual captures reviewed
 strict Anna validation passed with CLI 0.1.49 / schema 0.19.0
-no Executa, external origin, provider key, or hardcoded generated content
+4 clear English Marketplace screenshots uploaded
+app id 218, version id 584, candidate = installed = latest = 1.0.1
+grants satisfied with LLM, storage, auto/fixed session, and no Executa
+no external origin, provider key, or hardcoded generated content
+status remains pending_review until Anna approves it
 ```
 
 ## SkillQuest AI 1.0.0: split model creativity from deterministic contracts
@@ -2158,6 +2271,7 @@ were collected. Never use a version-history
 - A new matchmaking user joins an abandoned room: reject stale queue entries unless the owner is currently present, keep only a short creation grace window, and stop treating old polling timestamps as permanent connectivity.
 - Reconnect briefly succeeds and then shows the player offline: tag every socket with a connection id and ignore close events from superseded sockets.
 - The app restores an older move after refresh: serialize Anna Storage writes and wait for the latest save acknowledgement before reload.
+- A UI app's single Storage value can grow beyond `262144` bytes: split per-app index, decision core, generated analyses, and chat into namespaced bounded shards; test maximum serialized byte sizes, legacy migration, deletion, and overlapping saves.
 - Bundled handle is unresolved: ensure `app.json` contains the handle and the manifest uses `bundled:<same-handle>`.
 - UI invokes a dev tool in production: use the generated `window.__ANNA_TOOL_IDS__` map.
 - Runtime call is denied: align top-level `permissions`, `host_capabilities`, and `ui.host_api`, then let the user grant it.
@@ -2185,6 +2299,8 @@ were collected. Never use a version-history
 - Installed Apps contains two apps with the same name: open Permissions and verify the slug and version before testing, updating, or removing anything.
 - Review submission succeeded but the wrong version is pinned: run `apps submit-review <slug>` again only with user authorization, then verify `review_candidate_version` using status JSON.
 - New version uploaded but install still reports the prior version: compare `latest_version.version` and `review_candidate_version`. A pending-review app's generic install can follow the old candidate; pin the intended version, verify status, reinstall, and verify `installed_version`.
+- `anna-app dev` rewrites `.anna/dev-app.json` to a different app: the folder slug and intended listing slug differ. Pass both `--slug <intended-slug>` and `--llm-app-slug <intended-slug>`, add a before/after cache identity check, and use `--storage aps` for the real persistence gate.
+- The onboarding CTA is technically reachable but absent from Anna's initial view: move optional context/depth/date into progressive disclosure and assert the CTA bounding box is inside the declared `default_size`; locator visibility alone may auto-scroll.
 - `apps grants` shows the new version but an already-open App window still has the old bundle path: the App is `single_instance`, so the old iframe survived the install. Close that App window, open a fresh Anna session/window, and verify all three signals: the iframe path contains the intended semantic version, its signed token references the intended version id, and a feature unique to the new bundle is present. Do not diagnose a failed install from a stale singleton.
 - A shared game works locally but an online room still uses old rules: rebuild and deploy the realtime Worker as well as the Anna bundle, then run a game-specific production room test. Local UI success does not prove server rule parity.
 - A room action returns an HTML `500` instead of the App's JSON error: wrap Durable Object HTTP request handling, convert expected rule/presence errors to bounded JSON responses, and make the test parser include endpoint/status/content type when decoding fails.
@@ -2207,4 +2323,4 @@ were collected. Never use a version-history
 - [Game-Icons project](https://game-icons.net/)
 - [Game-Icons source and license](https://github.com/game-icons/icons)
 
-Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-25. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
+Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-26. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
