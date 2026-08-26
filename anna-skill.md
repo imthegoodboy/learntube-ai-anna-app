@@ -2436,3 +2436,69 @@ claim “published” when the app is only installed or pending review.
 - [Game-Icons source and license](https://github.com/game-icons/icons)
 
 Last verified against the 14-edit forum guide and Anna CLI `0.1.49` behavior observed through 2026-08-26. Reread the guide, check `anna-app --version`, and re-run strict validation on every future build.
+
+## CareerCraft AI — UI-only Anna App Pattern (2026-08-26)
+
+CareerCraft AI is a separate review candidate in `careercraft-ai/`. It is a useful reference for a polished productivity app that does not need an Executa. The app turns a resume and one role description into a grounded fit signal, proof gaps, next steps, tailored materials, interview coaching, and a small application tracker.
+
+### Architecture and permissions
+
+- Use `schema: 2` and declare only the capabilities the UI actually calls: top-level `permissions`/`host_capabilities` for `llm.complete`, `storage.read`, and `storage.write`; the matching `ui.host_api.llm`, `storage`, and `window` entries.
+- Permission-save compatibility requires the nested Agent declaration even when no Agent tool is used:
+
+  ```json
+  "agent": {
+    "session": { "auto": true, "fixed": { "client_ids": [] } },
+    "tools": []
+  }
+  ```
+
+- A UI-only app must keep both `required_executas` and `optional_executas` empty and must not leave the starter Executa scaffold in the product directory. Explain the choice in README and listing copy: Anna Host LLM and Anna Storage are the platform value; no model-provider key or external tool is required.
+- Treat supplied resumes and job descriptions as sensitive. Use a source-grounded system prompt: never invent employers, dates, metrics, qualifications, or experience; never submit applications or contact employers. Keep a deterministic local fallback so the primary workflow remains usable if Host LLM is unavailable.
+
+### First-use and visual quality
+
+- State the value before introducing feature vocabulary: `Add the source → See the signal → Make the move`. One primary CTA should be visible in the first 1240×820 view; optional fields belong in progressive disclosure.
+- Use a small, coherent palette (CareerCraft uses navy, paper, and acid lime), strong editorial type contrast, generous spacing, and restrained orbit/reveal/toast motion. Avoid dense card stacks and avoid making the product look like a generic chatbot.
+- Every route has a clear nav state: Overview, Match lab, Materials, Interview coach, Applications. Keep one primary CTA per screen, visible privacy boundaries, and an explicit “not submitted anywhere”/“no automatic outreach” message.
+- Always include `prefers-reduced-motion` CSS, a 320px minimum layout, a 390px mobile overflow test, focusable controls, labeled textareas, and a skip link. Capture listing screenshots only after reveal animations and fallback toasts have settled; never capture the harness chrome or a clipped modal.
+
+### Bounded persistence and fallback
+
+- Namespace keys (`careercraft-ai:profile:v1`, `workspace:v1`, `applications:v1`), sanitize every hydrated object, cap long text and list lengths, and serialize Storage writes through one promise queue. Keep current working data in memory and store compact records; Anna Storage has an observed 262144-byte JSON value limit.
+- Write localStorage first for standalone development, then mirror to Anna Storage when connected. On `storage.get`, tolerate Anna response shapes (`result`, `data`, direct value) and fall back to localStorage if the key is absent.
+- If Host LLM returns malformed JSON or is offline, use a deterministic source-grounded fallback and clearly label it in a toast. Do not claim a model-generated review when the fallback was used.
+
+### CareerCraft release gate
+
+From `careercraft-ai/`:
+
+```powershell
+npm test
+anna-app validate --strict
+
+# Direct static browser gate; set PLAYWRIGHT_MODULE to a local Playwright package.
+npm run test:browser
+npm run screenshots
+
+# Anna SDK/harness gate (the harness must be running on 5191).
+anna-app dev --port 5191 --no-llm
+npm run test:harness
+
+$ANNA_HOST = "https://anna.partners"
+anna-app apps publish --account $ANNA_HOST --json --no-bundled-executas
+anna-app apps sync-meta --account $ANNA_HOST --json
+anna-app apps status careercraft-ai --account $ANNA_HOST --json
+anna-app apps versions careercraft-ai --account $ANNA_HOST --json
+anna-app apps submit-review careercraft-ai --account $ANNA_HOST --json
+```
+
+The browser gate must prove: overview copy and primary CTA, sample fit review, generated result, reload persistence, tailored materials, coach response, application add/update, no unexpected page errors, and no mobile horizontal overflow. The harness gate must prove the runtime handshake, Storage RPCs, fit review, and reload persistence inside the hosted iframe. Record the immutable version/content hash, review candidate, listing CDN URLs, and test output. `pending_review` plus `is_published=false` means the app is not public yet; do not run `apps release` until Anna approves it.
+
+### CareerCraft-specific lessons
+
+- `anna-app publish` may create the immutable first version while leaving no working draft; `apps push` can still upload the mutable revision, and attempting to cut the same version again correctly returns “already cut.” Verify `apps versions` and submit the candidate rather than guessing from the dashboard label.
+- Listing screenshots are uploaded from `app.json.screenshots` by `apps publish`/`apps sync-meta`; keep the local PNGs committed and verify the returned CDN URLs.
+- Review evidence should not include a transient “Anna unavailable” toast. Wait for fallback notices to expire before capturing screenshots while retaining the notice in the actual product for truthful runtime feedback.
+- Local fallback keyword extraction must deduplicate evidence lines and ignore generic job-language words; otherwise one resume line is repeated for each overlapping token and the fit review looks noisy.
+- A GitHub repository with README, PRIVACY, DEPLOY, tests, and screenshot assets makes the Anna listing trustworthy. Keep `output/`, `.anna/`, and generated test artifacts out of git.
