@@ -2694,3 +2694,144 @@ installed version until that dashboard action is completed.
 - Keep historical immutable version ids and hashes separate from the next
   candidate. Never overwrite a cut version or describe `pending_review` as
   published.
+
+## CareerCraft AI 1.1 workspace lessons (2026-08-31)
+
+The CareerCraft review exposed a common product-architecture gap: a flow can
+have six passing feature tests and still feel like a worksheet if the AI is not
+helping users organize their durable data. For career apps, use this model:
+
+```text
+Profile (long-lived source of truth)
+  -> Application Library (one independent record per role)
+      -> Match / Materials / Interview state for that role
+```
+
+### Persistent Profile and Application Library
+
+- Keep Profile fields for the user's name, focus, resume evidence, education,
+  skills, projects, source filename, and update timestamp.
+- Keep each Application's company, role, job description, status, next move,
+  fit result, materials, coach messages, and interview state in that record.
+- Never store the current job description, match, or coach history only in
+  global UI state. Switching applications must not overwrite another role.
+- Retain small compatibility aliases in the UI if helpful, but synchronize
+  them from the active Application and commit them back before every save.
+- A safe migration should accept an older one-time `{resume, job, match,
+  materials, coachMessages}` workspace and wrap it into a single saved
+  Application without deleting existing data.
+- Anna Storage is the preferred persistence layer; localStorage can be a
+  bounded offline fallback. Keep values compact because observed Anna storage
+  values have a 262,144-byte JSON limit.
+
+### Resume upload and local parsing
+
+CareerCraft 1.1 adds a Profile upload control accepting PDF, DOCX, and TXT.
+Parse documents in the browser before saving them; do not upload a resume to a
+third-party parser or ask for a provider API key.
+
+- TXT: read with `file.text()`.
+- Text-based PDF: decode the bytes and extract PDF text literals used by `Tj`
+  and `TJ`; show a clear paste fallback when a scanned/image PDF has no text.
+- DOCX: read the ZIP central directory, extract `word/document.xml`, inflate
+  deflate entries with `DecompressionStream('deflate-raw')`, then collect
+  `w:t` nodes with `DOMParser`.
+- Always display the parsed text for user review before it becomes the Profile
+  source of truth, and keep the original filename as provenance metadata.
+- Test the file input with a browser smoke fixture and keep the parser
+  dependency-free so static Anna bundles remain portable.
+
+### Materials provenance and unsupported claims
+
+Tailored application materials must make factual boundaries visible. Ask the
+Anna prompt to return a provenance ledger for generated claims:
+
+```json
+{
+  "id": "claim-1",
+  "text": "Role-aligned summary built from resume evidence",
+  "category": "rewrite|reframe|unsupported",
+  "source": "Profile resume or role description",
+  "needsConfirmation": false
+}
+```
+
+Use these exact categories in the UI:
+
+- `Rewrite`: expression changes only; facts stay the same.
+- `Reframe`: highlights or reorganizes a fact already present in the Profile
+  to match the role.
+- `Unsupported / New Claim`: a skill, employer, date, metric, experience, or
+  achievement not supported by the original Profile.
+
+Unsupported / New Claim entries must be visibly flagged and remain
+unconfirmed until the user explicitly confirms them. Block copy/download
+exports while any unsupported claim is unconfirmed. Never silently present an
+unsupported claim as a verified fact, and never let the model invent evidence
+to increase a match score.
+
+### Intentional tool-less architecture
+
+CareerCraft is intentionally built with no App-specific Executa. Its Anna
+platform integration is:
+
+- Host LLM `llm.complete` for fit analysis, materials, and interview coaching;
+- Anna Storage `storage.read` / `storage.write` for Profile and Application
+  persistence; and
+- `agent.session.auto` plus the fixed-session declaration so the permission
+  dialog can save successfully.
+
+When no Executa is required, declare both `required_executas: []` and
+`optional_executas: []`, state the decision in README/DEPLOY docs and the
+Marketplace description, and do not create a fake related tool just to satisfy
+the listing. Verify that the Installed Apps screen shows no learned tool and
+that `apps grants` has no missing scopes.
+
+### CareerCraft verification and submission record
+
+The 1.1.0 candidate passed these checks on 2026-08-31:
+
+- `npm test`: 9 unit/config tests passed, including Profile navigation,
+  PDF/DOCX/TXT input declaration, claim categories, and export safeguards.
+- `anna-app validate --strict`: passed with manifest schema 2, storage and LLM
+  host APIs, `agent.session.auto`, and no Executas.
+- `npm run test:browser` (with the local Playwright module): passed match,
+  reload persistence, materials, coach, tracker, mobile overflow, and TXT
+  resume import.
+- `npm run test:harness` against `anna-app dev --port 5191 --no-llm`: passed
+  runtime handshake, Host Storage, fit review, and reload persistence.
+- Listing screenshots were regenerated after the Profile/Application redesign.
+
+Production CLI sequence used:
+
+```powershell
+$ANNA_HOST = "https://anna.partners"
+anna-app apps push --account $ANNA_HOST --json
+anna-app apps cut 1.1.0 --account $ANNA_HOST --json
+anna-app apps sync-meta --account $ANNA_HOST --json
+anna-app apps submit-review careercraft-ai --account $ANNA_HOST --json
+anna-app apps status careercraft-ai --account $ANNA_HOST --json
+anna-app apps versions careercraft-ai --account $ANNA_HOST --json
+anna-app apps grants careercraft-ai --account $ANNA_HOST --json
+```
+
+Observed immutable record: version id `607`, bundle id `580`, bundle SHA-256
+`42320b2a111e8054aedc39a30da0b60c06737062d9024b93afe00c6535663238`, and
+`frozen_executas: []`. Anna status is `pending_review`, review candidate
+`1.1.0`, `is_published: false`. This means the candidate is submitted for
+review but not public; do not run `apps release` until Anna approves it.
+
+### CareerCraft failure patterns to avoid
+
+- A single global Resume + JD state makes a multi-role career app overwrite
+  history. Store role-specific state in Application records.
+- A materials screen without a claim ledger makes role-tailoring look like
+  invented experience. Make Rewrite, Reframe, and Unsupported / New Claim
+  visible in the same review surface.
+- A PDF/DOCX upload that only accepts files without parsing is not automatic
+  resume import. Parse locally and show the resulting text.
+- `apps push` can succeed while the app remains `pending_review`; always run
+  `apps status` and report the candidate version separately from public release.
+- Refreshing listing screenshots after a UI change is part of the submission,
+  not a cosmetic afterthought. Keep the local screenshot paths in `app.json`
+  and run `apps sync-meta` before resubmission.
