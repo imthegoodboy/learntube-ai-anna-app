@@ -7,7 +7,7 @@ description: Build, test, package, publish, and maintain production Anna Apps wi
 
 Use this skill when an agent must create or change an Anna App end to end. The controlling workflow for this skill is the current [Build on Anna 101](https://forum.anna.partners/t/build-on-anna-101/228) guide. Anna is evolving quickly; reread that post before every build and prefer its Chapters 6–8 when another source describes an older publishing lifecycle. Treat the display name as presentation only: the app slug and server `app_id` determine which Anna app is changed.
 
-This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`–`1.0.1`, SkillQuest AI `1.0.0`–`1.1.1`, and Casefile Zero `1.0.1` review hardening through 2026-08-26: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, bounded Anna Storage sharding, serialized game-state recovery, dev-harness identity drift, and the difference between installed, under review, approved, and Marketplace-public.
+This revision includes the complete LearnTube AI `1.0.0`–`1.0.11` production and Marketplace-review experience, Gaming Arena `1.0.0`–`1.0.4`, Decision Room AI `1.0.0`–`1.1.0`, SkillQuest AI `1.0.0`–`1.1.1`, and Casefile Zero `1.0.1` review hardening through 2026-08-30: duplicate app names, new Executa identity creation, four-platform binary delivery, production Agent handshake and Cloud-IP caption failures, explicit Agent permission declarations, Marketplace metadata and screenshots, UI-only app architecture, live Host LLM edge cases, deterministic model fallbacks, app/tool version freezing, install-versus-load diagnostics, exact-input testing, chat UX, mobile harness testing, review-candidate pinning, catalog-grounded host prompts, retired-game migration, product-value review failures despite functional success, real-material grounding, bounded Anna Storage sharding, serialized game-state recovery, dev-harness identity drift, production permission allow-list mismatches, proactive AI decision drafting, and the difference between installed, under review, approved, and Marketplace-public.
 
 ## 1. Start with current sources
 
@@ -2503,3 +2503,180 @@ The browser gate must prove: overview copy and primary CTA, sample fit review, g
 - Local fallback keyword extraction must deduplicate evidence lines and ignore generic job-language words; otherwise one resume line is repeated for each overlapping token and the fit review looks noisy.
 - A GitHub repository with README, PRIVACY, DEPLOY, tests, and screenshot assets makes the Anna listing trustworthy. Keep `output/`, `.anna/`, and generated test artifacts out of git.
 - When a newer patch is uploaded while an older candidate is already `pending_review`, `apps publish` creates the new immutable version but may leave `review_candidate_version` on the older one. With explicit developer authorization, run `apps submit-review <slug>` again and verify the status JSON pins the new version. CareerCraft moved from 1.0.0 to 1.0.1 this way; it remains `is_published=false` until Anna approves it.
+
+## Decision Room AI — proactive review hardening (2026-08-30)
+
+Decision Room AI (`decision-room-ai`, app id `218`) is a reference UI-only
+decision workspace. Version `1.1.0` adds the AI-native layer reviewers asked for:
+
+- one plain-language prompt immediately creates a transparent, editable first
+  draft of options, deadline, weighted criteria, initial scores with reasoning,
+  clarifying questions, assumptions, risks, and exactly five premortem causes;
+- Compare explains the current leader, influential criteria, evidence coverage,
+  and whether a weight shift could change the result;
+- Commit pre-fills a conditional recommendation, confidence, rationale, and
+  next action for the user to confirm or edit;
+- Review shows the exact stored review date, with a relative countdown only as a
+  secondary label.
+
+### Permission placement that works in production
+
+The top-level `manifest.permissions` field accepts only the server allow-list:
+`llm.complete`, `storage.read`, and `storage.write` for this app. Production
+rejects `agent.session.auto` as an unknown top-level permission token even when
+the local strict validator accepts arbitrary strings. To satisfy the Anna
+permission editor, declare Agent submodes only in the UI Host API:
+
+```json
+{
+  "permissions": ["llm.complete", "storage.read", "storage.write"],
+  "ui": {
+    "host_api": {
+      "agent": {
+        "session": { "auto": true, "fixed": { "client_ids": [] } },
+        "tools": []
+      }
+    }
+  }
+}
+```
+
+Keep the app's `required_executas` and `optional_executas` arrays empty when no
+tool is needed. Document the intentional architecture as UI + Anna
+`llm.complete` + Anna Storage; do not add a starter Executa merely to make the
+listing appear more integrated. The dispatcher gates actual UI calls through
+`ui.host_api`, while top-level permissions are display/audit metadata and must
+still use the current allow-list.
+
+### Verified release record
+
+On 2026-08-30, the app passed `npm run verify` (identity, build, 19 unit/config
+tests, strict validation, and 8 browser tests) and the live Anna LLM test. The
+Anna CLI accepted the draft push with a ready 7-file bundle, cut immutable
+version `1.1.0` as version id `594` (bundle id `567`, SHA-256 manifest
+`9476fbc9db54e790b1b6447dd12002f4d5a52eb279aa902ae508d29f03c3a781`), and
+`apps submit-review` pinned `review_candidate_version: 1.1.0`. Status was
+`pending_review` / `is_published: false`, so the app was submitted for review
+but was not public. Never describe this state as released; run `apps release`
+only after Anna changes it to `approved`.
+
+After cutting and submitting, run `apps sync-meta` when listing assets or copy
+changed and verify that it returns CDN URLs for every screenshot and the logo.
+For this version it uploaded six English screenshots plus the logo while
+preserving `pending_review` and candidate `1.1.0`.
+
+The GitHub remote is a separate authorization boundary. The first push in this
+run was rejected with HTTP 403 because a stale local credential lacked write
+access. After the owner reconnected GitHub, `git push origin main` succeeded and
+`git ls-remote origin refs/heads/main` confirmed commit
+`5b0544086abe2e5a928c4508bc90260fa41177e6`. Do not rewrite history or switch
+remotes to work around a credential error; repair the correct account access,
+then verify the remote branch hash.
+
+## Decision Room AI — 1.1.1 UI and live-model hardening (2026-08-31)
+
+The next Decision Room candidate keeps the same intentional tool-less
+architecture (`decision-room-ai`, app id `218`) and addresses the remaining
+product and QA risks without weakening the six-stage workflow.
+
+### Product-first UI rules
+
+- The first screen should lead with the decision prompt and one primary action.
+  Remove oversized editorial/marketing copy that delays the task. Keep only a
+  compact toolbar, a short explanation of what Anna prepares, and progressive
+  disclosure for optional context, deadline, depth, and templates.
+- Put the primary CTA inside the default 1200×820 viewport. Optional fields and
+  template choices should not consume the first-screen focus.
+- Use compact stage headers across Frame, Compare, Challenge, Coach, Commit, and
+  Review so the actual decision controls appear early. Preserve a visible stage
+  navigation and one clear next action.
+- Re-run visual captures after all toasts and reveal animations settle. Review
+  desktop creation, AI draft, Compare, Premortem, Home, and mobile Coach images;
+  do not upload harness chrome or a clipped modal as listing art.
+
+### Anna model budget and JSON reliability
+
+Anna's installed LLM grant can report `max_tokens_per_call: 4096`. Qwen-backed
+Anna calls may spend the entire budget on hidden reasoning and return an empty
+visible text value even with `stopReason: endTurn`. A larger allowed budget plus
+a compact output contract is more reliable than asking for a verbose object at a
+smaller cap.
+
+For a structured first draft:
+
+1. Give the call the full allowed `maxTokens: 4096`.
+2. Tell the model to think silently and keep visible output under about 1,200
+   tokens; require minified JSON only.
+3. Use compact keys and array indexes for options, criteria, scores, risks, and
+   premortem rows. Expand that transport shape into the normal editable model in
+   the client, so the product and storage schema stay readable.
+4. Keep options at 2–3, criteria at exactly 4, assumptions at 3, questions at 2,
+   and premortem causes at exactly 5. Short strings materially reduce truncation.
+5. Serialize the automatic first draft before Challenge/Coach calls. A user can
+   navigate quickly; subsequent analysis must await `draftPromise` rather than
+   race the first save or model call.
+6. Bound transient LLM retries to two attempts with a finite timeout (100 seconds
+   per attempt) and a short delay. A retry is useful for a transient host failure,
+   but never loop indefinitely.
+
+The UI must keep the deterministic local draft and analysis fallback. Label it
+truthfully when Anna returns no visible text or is unavailable; never claim an
+Anna-generated result for local data. The live gate should assert the Anna label
+and non-fallback Coach response when the host route is available, while the
+deterministic gate proves the complete offline workflow.
+
+### Live test navigation and evidence
+
+The actual path after the automatic draft is `Frame → Compare → Challenge →
+Coach`; the “Ask the Coach” CTA is on Challenge, not Frame. A live Playwright
+test that looks for it directly on Frame will time out despite a correct app.
+Assert the Anna draft label, then navigate through the visible Challenge stage,
+open Coach, send a starter question, and assert the last assistant message is
+not marked “Local fallback.” Keep the trace, but redact runtime JWT/query tokens
+before sharing any diagnostics.
+
+The 1.1.1 candidate passed the following gates on 2026-08-31:
+
+- `npm run check`: identity, build, 21 unit/config tests, strict validation.
+- `npm run test:e2e`: 8/8 deterministic browser tests, including first-use CTA
+  placement, storage restore, mobile overflow, accessibility, and visual QA.
+- `npm run test:e2e:live`: Anna generated the compact first draft and the
+  grounded Coach response in a 2-minute hosted run.
+
+### Version and Marketplace submission checklist
+
+When these changes are ready, bump `app.json`, `package.json`, and
+`package-lock.json` together (for example `1.1.1`), rebuild `bundle/`, and run
+all three gates above. Commit and push the source first. Then use the production
+host explicitly:
+
+```powershell
+$ANNA_HOST = "https://anna.partners"
+anna-app apps push --account $ANNA_HOST --json
+anna-app apps cut 1.1.1 --account $ANNA_HOST --json
+anna-app apps sync-meta --account $ANNA_HOST --json
+anna-app apps submit-review decision-room-ai --account $ANNA_HOST --json
+anna-app apps status decision-room-ai --account $ANNA_HOST --json
+anna-app apps grants decision-room-ai --account $ANNA_HOST --json
+```
+
+Install from the Developer app list, which installs the exact review candidate;
+the Versions-page “Install & test” button can install `0.0.0-draft` instead.
+Verify the iframe path contains the cut version, save permissions in the dialog,
+and confirm `missing: []`, `satisfied: true`, and `executa_grants: []` for the
+intentional tool-less app. `pending_review` with `is_published: false` means the
+candidate is submitted but not public. Do not run `apps release` until Anna
+changes the status to `approved`.
+
+### New failure patterns to record
+
+- A model response with `outputTokens` equal to the request cap and empty visible
+  text is a budget/truncation symptom. Increase the allowed budget within the
+  grant and compact the schema; do not weaken permissions or add a fake tool.
+- A live Playwright timeout waiting for a route CTA can be a test navigation bug;
+  inspect the page snapshot before changing product code.
+- If the trace shows a complete Anna draft followed by a missing CTA, the model
+  path is fixed and the test should follow the app's actual stage hierarchy.
+- Keep historical immutable version ids and hashes separate from the next
+  candidate. Never overwrite a cut version or describe `pending_review` as
+  published.
