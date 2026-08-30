@@ -2643,6 +2643,13 @@ The 1.1.1 candidate passed the following gates on 2026-08-31:
 - `npm run test:e2e:live`: Anna generated the compact first draft and the
   grounded Coach response in a 2-minute hosted run.
 
+The production cut returned immutable version id `606`, bundle id `579`, 7
+files, and manifest SHA-256
+`5ad483bb1c22d774b17e0226fbd1595a36ad9cf52ed39c37fbee76063635a1f2`.
+`apps submit-review` pinned `review_candidate_version: 1.1.1`; status remained
+`pending_review` with `is_published: false`. The candidate was submitted, not
+released publicly.
+
 ### Version and Marketplace submission checklist
 
 When these changes are ready, bump `app.json`, `package.json`, and
