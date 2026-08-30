@@ -2675,6 +2675,13 @@ intentional tool-less app. `pending_review` with `is_published: false` means the
 candidate is submitted but not public. Do not run `apps release` until Anna
 changes the status to `approved`.
 
+The CLI exposes push/cut/review/status/grants but not an app-install command.
+Exact-candidate installation is a dashboard action and requires an authenticated
+Anna web session. If the browser redirects to `/login`, do not enter or inspect
+credentials programmatically; ask the owner to sign in, then install from the
+Developer app list. The CLI grants endpoint may still show the previously
+installed version until that dashboard action is completed.
+
 ### New failure patterns to record
 
 - A model response with `outputTokens` equal to the request cap and empty visible
