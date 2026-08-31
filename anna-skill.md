@@ -2875,3 +2875,12 @@ strict-manifest, browser, and Anna-harness tests, then push/cut the next
 candidate. Do not use a public-release action while review is pending; verify
 `apps status` and report `review_candidate_version` separately from
 `is_published`.
+
+The submitted Casefile candidate is version `1.0.2` (Anna version id `609`,
+bundle id `582`, content hash
+`d887516ea9f224282fc42ba9c828684596906c21c5a945b7a9a9aa44e609eb77`, bundle
+SHA-256 `b8d2acd8cc3902fcd8cd972ec5d5f06830897548183f014dc3abad7665d51f44`).
+It is `pending_review` and `is_published: false`; do not call `apps release`
+until approval. If the owner account still has `1.0.1` installed, treat that
+as an install-state check—not a candidate failure—and install the exact `1.0.2`
+candidate through Anna before claiming manual runtime verification.
