@@ -4,9 +4,13 @@ import assert from "node:assert/strict";
 import {
   extractYouTubeId,
   groundedMentorFallback,
+  mentorAnswerText,
   normalizeLesson,
+  parseLessonCoreText,
   parseStructuredJson,
+  sampledSourceEvidence,
   scheduleCard,
+  sourceGroundedLessonFallback,
   splitSource,
   transcriptToolErrorMessage,
   touchStudyDay,
@@ -52,6 +56,56 @@ test("groundedMentorFallback refuses unrelated questions", () => {
   assert.match(groundedMentorFallback(lesson, "Explain quantum entanglement"), /not covered in this lesson/i);
 });
 
+test("mentorAnswerText keeps a normal plain-text mentor reply", () => {
+  const answer = mentorAnswerText(
+    "BFS uses a queue so it can explore the graph one layer at a time.",
+    { title: "Graph search", keyIdeas: [] },
+    "How does BFS work?",
+  );
+  assert.equal(answer, "BFS uses a queue so it can explore the graph one layer at a time.");
+});
+
+test("mentorAnswerText unwraps a structured answer field", () => {
+  const answer = mentorAnswerText(
+    '{"answer":"DFS follows one branch deeply before backtracking."}',
+    { title: "Graph search", keyIdeas: [] },
+    "How does DFS work?",
+  );
+  assert.equal(answer, "DFS follows one branch deeply before backtracking.");
+});
+
+test("mentorAnswerText replaces lesson-shaped JSON with saved evidence", () => {
+  const lesson = {
+    title: "Graph search",
+    keyIdeas: [{
+      heading: "BFS Data Structure",
+      explanation: "Breadth-first search uses a FIFO queue.",
+      evidenceQuote: "BFS requires a queue data structure",
+    }],
+  };
+  const accidentalWorkspace = JSON.stringify({
+    title: "Wrong fixture lesson",
+    summary: "Unrelated generated content.",
+    keyIdeas: [],
+    flashcards: [],
+    quiz: [],
+  });
+  const answer = mentorAnswerText(accidentalWorkspace, lesson, "Why does BFS use a queue?");
+  assert.match(answer, /FIFO queue/);
+  assert.doesNotMatch(answer, /Wrong fixture lesson|flashcards|quiz/);
+});
+
+test("mentorAnswerText gives greetings a lesson-aware welcome", () => {
+  const answer = mentorAnswerText(
+    '{"title":"Unexpected lesson JSON","flashcards":[]}',
+    { title: "Graph search", keyIdeas: [] },
+    "Hey",
+  );
+  assert.match(answer, /Graph search/);
+  assert.match(answer, /explain, compare, recap, or quiz/i);
+  assert.doesNotMatch(answer, /Unexpected lesson JSON/);
+});
+
 test("normalizeLesson validates generated collections and initializes progress", () => {
   const lesson = normalizeLesson(
     {
@@ -70,6 +124,27 @@ test("normalizeLesson validates generated collections and initializes progress",
   assert.equal(lesson.quiz[0].answerIndex, 1);
   assert.deepEqual(lesson.progress.weakConcepts, {});
   assert.equal(lesson.roadmap[0].minutes, 20);
+});
+
+test("normalizeLesson recovers a quiz answer supplied as option text", () => {
+  const lesson = normalizeLesson(
+    {
+      title: "Line graph lesson",
+      summary: "A concise lesson.",
+      keyIdeas: [{ heading: "Chart insertion", explanation: "Use the Insert tab." }],
+      flashcards: [{ front: "Where?", back: "Insert tab", concept: "Chart insertion" }],
+      quiz: [{
+        question: "Where is the line graph inserted?",
+        options: ["Home tab", "Insert tab", "Data tab", "View tab"],
+        answer: "Insert tab",
+      }],
+    },
+    { type: "youtube", text: "Evidence", title: "Line graph lesson" },
+    new Date("2026-08-23T00:00:00.000Z"),
+  );
+  assert.equal(lesson.quiz[0].answerIndex, 1);
+  assert.equal(lesson.quiz[0].options[lesson.quiz[0].answerIndex], "Insert tab");
+  assert.ok(lesson.quiz.length >= 1);
 });
 
 test("normalizeLesson derives source-grounded practice when the model omits collections", () => {
@@ -105,6 +180,80 @@ test("normalizeLesson derives source-grounded practice when the model omits coll
     assert.equal(question.options[question.answerIndex], question.explanation);
     assert.ok(objectives.includes(question.explanation));
   }
+});
+
+test("normalizeLesson completes promised practice counts from rich grounded ideas", () => {
+  const keyIdeas = Array.from({ length: 4 }, (_, index) => ({
+    heading: `Idea ${index + 1}`,
+    explanation: `Grounded explanation ${index + 1}`,
+    example: `Grounded example ${index + 1}`,
+    watchOut: `Grounded warning ${index + 1}`,
+    evidenceQuote: `Source cue ${index + 1}`,
+  }));
+  const lesson = normalizeLesson(
+    {
+      title: "Rich lesson",
+      summary: "A compact source-grounded lesson.",
+      keyIdeas,
+      flashcards: [],
+      quiz: [],
+      actions: [],
+      roadmap: [],
+    },
+    { type: "youtube", text: "Caption evidence", title: "Rich lesson" },
+    new Date("2026-08-23T00:00:00.000Z"),
+  );
+
+  assert.equal(lesson.keyIdeas.length, 4);
+  assert.equal(lesson.flashcards.length, 6);
+  assert.equal(lesson.quiz.length, 5);
+  assert.equal(lesson.actions.length, 3);
+  assert.equal(lesson.roadmap.length, 3);
+  assert.ok(lesson.quiz.every((question) => question.options.length === 4));
+  assert.ok(lesson.quiz.every((question) => question.options[question.answerIndex] === question.explanation));
+});
+
+test("sourceGroundedLessonFallback stays usable when Anna returns no visible text", () => {
+  const source = {
+    type: "youtube",
+    title: "A real lesson",
+    label: "A real lesson · Teacher",
+    text: "[00:00] First supported explanation has enough detail to become a useful lesson excerpt. [01:00] Second supported explanation has enough detail to become another useful excerpt. [02:00] Third supported explanation adds a procedure grounded in the transcript. [03:00] Fourth supported explanation closes the lesson with a warning grounded in the transcript.",
+  };
+  const core = sourceGroundedLessonFallback(source);
+  const lesson = normalizeLesson(core, source, new Date("2026-08-31T00:00:00.000Z"));
+  assert.equal(lesson.title, "A real lesson");
+  assert.equal(lesson.keyIdeas.length, 4);
+  assert.equal(lesson.flashcards.length, 6);
+  assert.ok(lesson.summary.includes("supported explanation"));
+});
+
+test("parseLessonCoreText reads the compact non-JSON lesson protocol", () => {
+  const parsed = parseLessonCoreText([
+    "TITLE: Absolute Value Graphs",
+    "SOURCE: YouTube lesson",
+    "SUMMARY: One. Two. Three.",
+    "OBJECTIVES: Plot a graph || Find its range || Explain a reflection",
+    "IDEA1: Parent graph || It is V-shaped. || Plot (0,0). || Keep symmetry. || looks like a v",
+    "IDEA2: Reflections || An outside negative flips it. || y=-|x| || Inside does not flip. || reflect over x-axis",
+    "IDEA3: Shifts || Inside moves horizontally. || x-3 moves right. || Check the sign. || shift three units",
+    "IDEA4: Range || Opening sets the bound. || [2,infinity) || Include the vertex. || zero is included",
+  ].join("\n"));
+  assert.equal(parsed.title, "Absolute Value Graphs");
+  assert.equal(parsed.objectives.length, 3);
+  assert.equal(parsed.keyIdeas.length, 4);
+  assert.equal(parsed.keyIdeas[1].heading, "Reflections");
+});
+
+test("sampledSourceEvidence keeps compact beginning-to-end transcript coverage", () => {
+  const transcript = Array.from({ length: 40 }, (_, index) =>
+    `[${String(Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}] caption ${index} explains source point ${index}`,
+  ).join("\n");
+  const sample = sampledSourceEvidence(transcript, 8);
+  assert.ok(sample.length < transcript.length);
+  assert.match(sample, /caption 0|caption 1/);
+  assert.match(sample, /caption 3[5-9]/);
+  assert.equal(sample.split("\n").length, 8);
 });
 
 test("scheduleCard spaces easy recalls and keeps hard cards close", () => {
@@ -162,4 +311,12 @@ test("transcriptToolErrorMessage hides deployment internals and gives a recovery
   assert.doesNotMatch(message, /tool-secret-id/);
   assert.match(message, /Update or reinstall LearnTube AI/);
   assert.match(message, /Paste transcript/);
+});
+
+test("transcriptToolErrorMessage explains stable caption failure codes", () => {
+  assert.match(transcriptToolErrorMessage({ code: "CAPTIONS_DISABLED" }), /Captions are disabled/);
+  assert.match(transcriptToolErrorMessage({ code: "NO_TRANSCRIPT" }), /No usable captions/);
+  assert.match(transcriptToolErrorMessage({ code: "VIDEO_UNAVAILABLE" }), /private, unavailable, or region restricted/);
+  assert.match(transcriptToolErrorMessage({ code: "YOUTUBE_BLOCKED" }), /current Agent/);
+  assert.match(transcriptToolErrorMessage({ code: "TRANSCRIPT_TIMEOUT" }), /timed out/);
 });

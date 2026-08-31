@@ -10,9 +10,12 @@ import {
   groundedMentorFallback,
   isDue,
   lessonMatches,
+  mentorAnswerText,
   normalizeLesson,
-  parseStructuredJson,
+  parseLessonCoreText,
+  sampledSourceEvidence,
   scheduleCard,
+  sourceGroundedLessonFallback,
   splitSource,
   transcriptToolErrorMessage,
   touchStudyDay,
@@ -25,6 +28,7 @@ const DEV_FALLBACK_TOOL_ID = "tool-dev-learntube-transcript";
 const TRANSCRIPT_TOOL_ID = window.__ANNA_TOOL_IDS__?.[EXECUTA_HANDLE] || DEV_FALLBACK_TOOL_ID;
 const MAX_MENTOR_EVIDENCE = 34000;
 const MAX_PERSISTED_SOURCE = 170000;
+const TRANSCRIPT_TOOL_TIMEOUT_MS = 180000;
 
 const page = document.getElementById("page");
 const pageTitle = document.getElementById("page-title");
@@ -550,18 +554,18 @@ function llmText(response) {
   return response?.content?.text || response?.result?.content?.text || response?.text || "";
 }
 
-async function complete(request, { emptyRetryMaxTokens = 0 } = {}) {
+async function complete(request, { emptyRetryMaxTokens = 0, emptyRetryInstruction = "", timeoutMs = 180000 } = {}) {
   if (!state.anna?.llm?.complete) {
     throw new Error("Open LearnTube inside Anna to generate AI study material.");
   }
-  let response = await state.anna.llm.complete(request, { timeoutMs: 180000 });
+  let response = await state.anna.llm.complete(request, { timeoutMs });
   let text = llmText(response);
   if (!text && emptyRetryMaxTokens) {
     response = await state.anna.llm.complete({
       ...request,
       maxTokens: emptyRetryMaxTokens,
-      systemPrompt: `${request.systemPrompt || ""}\nReturn the final visible answer immediately and keep it under 180 words.`,
-    }, { timeoutMs: 180000 });
+      systemPrompt: `${request.systemPrompt || ""}\n${emptyRetryInstruction || "Return the final visible answer immediately and keep it under 180 words."}`,
+    }, { timeoutMs });
     text = llmText(response);
   }
   if (!text) throw new Error("Anna returned an empty model response. Please retry.");
@@ -578,15 +582,17 @@ async function resolveYouTubeSource(url) {
       tool_id: TRANSCRIPT_TOOL_ID,
       method: "youtube.transcript",
       args: { url, languages: ["en", "en-US", "en-GB"] },
-      timeoutMs: 90000,
+      timeoutMs: TRANSCRIPT_TOOL_TIMEOUT_MS,
     });
   } catch (error) {
     throw new Error(transcriptToolErrorMessage(error));
   }
   const payload = response?.result?.data || response?.data || response?.result || response;
   if (!payload?.ok) {
-    const error = payload?.message || "Captions could not be retrieved for this video.";
-    throw new Error(`${error} You can still use this lesson by pasting its transcript.`);
+    throw new Error(transcriptToolErrorMessage({
+      code: payload?.code,
+      message: payload?.message,
+    }));
   }
   const captionCount = Number(payload.segmentCount || 0);
   updateBusy(
@@ -606,7 +612,7 @@ async function resolveYouTubeSource(url) {
 }
 
 function lessonPrompt(evidence, source) {
-  return `SOURCE METADATA\nType: ${source.type}\nTitle: ${source.title || "Unknown"}\nLanguage: ${source.language || "Unknown"}\n\nSOURCE EVIDENCE\n${evidence}\n\nCreate a complete study workspace using only the source evidence. Return exactly one valid JSON object with this shape:\n{\n  "title": "specific lesson title",\n  "sourceLabel": "short source label",\n  "summary": "clear 3-5 sentence summary",\n  "objectives": ["3-5 observable learning outcomes"],\n  "keyIdeas": [{"heading":"", "explanation":"", "example":"", "watchOut":"", "evidenceQuote":"short exact or near-exact source cue"}],\n  "flashcards": [{"front":"", "back":"", "concept":""}],\n  "quiz": [{"question":"", "options":["four plausible options"], "answerIndex":0, "explanation":"", "concept":""}],\n  "actions": [{"text":"", "dueHint":""}],\n  "roadmap": [{"title":"next topic", "why":"why it follows", "minutes":15}],\n  "cheatSheet": {"headline":"", "essentials":[""], "workflow":[""], "traps":[""]},\n  "suggestedQuestions": ["questions the learner can ask the mentor"]\n}\nKeep the JSON compact and under about 3000 output tokens: provide 4-5 key ideas, 6-8 flashcards, 5 quiz questions, 3 actions, and 3 roadmap steps. Keep every string concise; omit long prose and duplicate examples. Do not add outside facts. Do not use Markdown fences. Keep the entire response valid JSON.`;
+  return `SOURCE METADATA\nType: ${source.type}\nTitle: ${source.title || "Unknown"}\nLanguage: ${source.language || "Unknown"}\n\nSOURCE EVIDENCE\n${evidence}\n\nReturn exactly 8 plain-text lines in this format:\nTITLE: specific lesson title\nSOURCE: short source label\nSUMMARY: exactly 3 short sentences\nOBJECTIVES: outcome 1 || outcome 2 || outcome 3\nIDEA1: heading || explanation || example || warning || short source cue\nIDEA2: heading || explanation || example || warning || short source cue\nIDEA3: heading || explanation || example || warning || short source cue\nIDEA4: heading || explanation || example || warning || short source cue\nKeep each field under 110 characters. Use only the evidence. Do not output JSON, Markdown, labels other than these 8, or reasoning.`;
 }
 
 async function buildLesson(source) {
@@ -624,6 +630,9 @@ async function buildLesson(source) {
         systemPrompt: "You are compressing one part of a lesson transcript for a later source-grounded study guide. Extract the actual claims, explanations, examples, warnings, procedures, and useful source phrases. Preserve any timestamps. Do not add knowledge. Return concise plain text, not JSON.",
         maxTokens: 1300,
         temperature: 0.1,
+      }, {
+        emptyRetryMaxTokens: 1600,
+        emptyRetryInstruction: "The previous response was empty. Return the concise source-evidence digest now as plain text.",
       });
       digests.push(`PART ${index + 1}\n${digest}`);
     }
@@ -632,25 +641,31 @@ async function buildLesson(source) {
 
   assertNotCancelled();
   updateBusy("Designing notes, cards, quiz, and roadmap…", 76);
-  const raw = await complete({
-    messages: [{ role: "user", content: { type: "text", text: lessonPrompt(evidence, source) } }],
-    systemPrompt: "You are LearnTube's curriculum designer. Be precise, practical, and strictly source-grounded. Your entire response must be valid JSON matching the requested schema.",
-    maxTokens: 4096,
-    temperature: 0.2,
-  });
-
-  let parsed;
+  const curriculumEvidence = evidence.length > 6000 ? sampledSourceEvidence(evidence, 8) : evidence;
+  let raw = "";
   try {
-    parsed = parseStructuredJson(raw);
+    raw = await complete({
+      messages: [{ role: "user", content: { type: "text", text: lessonPrompt(curriculumEvidence, source) } }],
+      systemPrompt: "Extract a compact lesson core from the supplied evidence. Return only the requested 8 plain-text lines. Do not reason aloud.",
+      modelPreferences: { speedPriority: 0.9, hints: [{ name: "gemini" }] },
+      maxTokens: 2400,
+      temperature: 0.2,
+    }, { timeoutMs: 90000 });
+  } catch (error) {
+    assertNotCancelled();
+    updateBusy("Using the saved source evidence…", 88);
+    return normalizeLesson(sourceGroundedLessonFallback(source), source);
+  }
+
+  let parsed = {};
+  try {
+    parsed = parseLessonCoreText(raw);
   } catch {
-    updateBusy("Repairing the lesson format…", 88);
-    const repaired = await complete({
-      messages: [{ role: "user", content: { type: "text", text: `Repair this into one valid JSON object. Preserve its meaning and requested fields. Return JSON only.\n\n${raw}` } }],
-      systemPrompt: "You repair malformed JSON. Output JSON only, without Markdown fences or commentary.",
-      maxTokens: 4096,
-      temperature: 0,
-    });
-    parsed = parseStructuredJson(repaired);
+    parsed = {};
+  }
+  if (!Array.isArray(parsed.keyIdeas) || parsed.keyIdeas.length < 2) {
+    updateBusy("Using the saved source evidence…", 88);
+    parsed = sourceGroundedLessonFallback(source);
   }
 
   assertNotCancelled();
@@ -770,12 +785,16 @@ async function askMentor(form) {
   scrollMentorToEnd();
   try {
     const evidence = lesson.sourceText.slice(0, MAX_MENTOR_EVIDENCE);
-    const answer = await complete({
-      messages: [{ role: "user", content: { type: "text", text: `${question}\n\nLESSON NOTES\n${lesson.summary}\n${lesson.keyIdeas.map((idea) => `${idea.heading}: ${idea.explanation}`).join("\n")}\n\nSOURCE EVIDENCE\n${evidence}` } }],
-      systemPrompt: "You are a grounded lesson mentor. Answer only from the supplied lesson notes and source evidence. Be clear and concise, connect ideas when the evidence supports it, and explicitly say 'That is not covered in this lesson' when it does not. Never invent citations or facts.",
+    const rawAnswer = await complete({
+      messages: [{ role: "user", content: { type: "text", text: `LEARNER QUESTION\n${question}\n\nLESSON NOTES\n${lesson.summary}\n${lesson.keyIdeas.map((idea) => `${idea.heading}: ${idea.explanation}`).join("\n")}\n\nSOURCE EVIDENCE\n${evidence}` } }],
+      systemPrompt: "You are a grounded lesson mentor. Answer only from the supplied lesson notes and source evidence. Be clear and concise, connect ideas when the evidence supports it, and explicitly say 'That is not covered in this lesson' when it does not. Return a short plain-text answer only—never JSON, a lesson schema, Markdown metadata, or invented citations.",
       maxTokens: 2400,
       temperature: 0.2,
-    }, { emptyRetryMaxTokens: 3200 });
+    }, {
+      emptyRetryMaxTokens: 3200,
+      emptyRetryInstruction: "The previous response was empty. Answer the learner now in under 180 words using plain text only, never JSON.",
+    });
+    const answer = mentorAnswerText(rawAnswer, lesson, question);
     messages.push({ role: "assistant", text: answer, createdAt: new Date().toISOString() });
     state.mentorPendingLessonId = null;
     state.profile = touchStudyDay({ ...state.profile, xp: (state.profile.xp || 0) + 6 });

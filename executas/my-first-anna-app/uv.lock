@@ -209,14 +209,18 @@ wheels = [
 
 [[package]]
 name = "tool-nikku696969-learntube-study-transcript-ujzngt7x"
-version = "1.0.4"
+version = "1.0.5"
 source = { editable = "." }
 dependencies = [
+    { name = "requests" },
     { name = "youtube-transcript-api" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "youtube-transcript-api", specifier = ">=1.2.2,<2" }]
+requires-dist = [
+    { name = "requests", specifier = ">=2.31,<3" },
+    { name = "youtube-transcript-api", specifier = ">=1.2.2,<2" },
+]
 
 [[package]]
 name = "urllib3"

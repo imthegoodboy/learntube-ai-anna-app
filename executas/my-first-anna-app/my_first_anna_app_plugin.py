@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     IpBlocked,
@@ -30,12 +31,15 @@ TOOL_METHOD = "youtube.transcript"
 MAX_TRANSCRIPT_CHARS = 180_000
 MAX_EDGE_RESPONSE_BYTES = 2_000_000
 EDGE_TRANSCRIPT_ORIGIN = "https://youtube-transcript.ai"
+NETWORK_CONNECT_TIMEOUT_SECONDS = 8
+NETWORK_READ_TIMEOUT_SECONDS = 20
+EDGE_TIMEOUT_SECONDS = 25
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 MANIFEST = {
     "name": TOOL_ID,
     "display_name": "LearnTube Study Transcript",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": (
         "Retrieves public YouTube captions and metadata for source-grounded "
         "LearnTube AI lessons."
@@ -67,6 +71,17 @@ MANIFEST = {
         }
     ],
 }
+
+
+class _BoundedSession(requests.Session):
+    """Give every youtube-transcript-api request a finite connect/read budget."""
+
+    def request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        kwargs.setdefault(
+            "timeout",
+            (NETWORK_CONNECT_TIMEOUT_SECONDS, NETWORK_READ_TIMEOUT_SECONDS),
+        )
+        return super().request(method, url, **kwargs)
 
 
 def extract_video_id(value: str) -> str | None:
@@ -122,7 +137,9 @@ def _metadata(video_id: str) -> dict[str, str]:
 
 
 def _fetch_transcript(video_id: str, preferred_languages: list[str]) -> dict[str, Any]:
-    api = YouTubeTranscriptApi()
+    # The library's default requests session has no timeout. On a Cloud Agent,
+    # that can leave a caption lookup hanging until Anna kills the whole tool.
+    api = YouTubeTranscriptApi(http_client=_BoundedSession())
     transcript_list = api.list(video_id)
     transcript = None
     if preferred_languages:
@@ -192,7 +209,7 @@ def _fetch_edge_transcript(video_id: str, preferred_languages: list[str]) -> dic
             "User-Agent": "LearnTube-Anna/1.0 (+https://anna.partners)",
         },
     )
-    with urlopen(request, timeout=25) as response:  # noqa: S310 - fixed HTTPS origin
+    with urlopen(request, timeout=EDGE_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed HTTPS origin
         body = response.read(MAX_EDGE_RESPONSE_BYTES + 1)
 
     truncated = len(body) > MAX_EDGE_RESPONSE_BYTES
@@ -264,7 +281,13 @@ def transcript_result(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "code": "NO_TRANSCRIPT", "message": "No usable captions were found for this video."}
     except VideoUnavailable:
         return {"ok": False, "code": "VIDEO_UNAVAILABLE", "message": "This video is private, unavailable, or region restricted."}
-    except (RequestBlocked, IpBlocked, HTTPError, URLError, TimeoutError):
+    except (requests.exceptions.Timeout, TimeoutError):
+        return {
+            "ok": False,
+            "code": "TRANSCRIPT_TIMEOUT",
+            "message": "Caption retrieval timed out while contacting YouTube.",
+        }
+    except (RequestBlocked, IpBlocked, HTTPError, URLError):
         return {
             "ok": False,
             "code": "YOUTUBE_BLOCKED",

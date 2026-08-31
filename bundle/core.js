@@ -65,6 +65,116 @@ function cleanObjectArray(value, mapper, limit) {
     : [];
 }
 
+function sourceEvidenceSnippets(value, limit = 4) {
+  const raw = String(value || "");
+  const captionParts = raw
+    .split(/(?=\[\d{1,2}:\d{2}(?::\d{2})?\])/)
+    .map((part) => {
+      const timestamp = part.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?)\]/)?.[1] || "";
+      const text = cleanText(part.replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/, ""));
+      return text ? { timestamp, text } : null;
+    })
+    .filter(Boolean);
+  if (captionParts.length >= limit) {
+    const positions = limit === 4
+      ? [0.04, 0.3, 0.56, 0.82]
+      : Array.from({ length: limit }, (_, index) => (index / Math.max(1, limit - 1)) * 0.94);
+    return Array.from({ length: limit }, (_, index) => {
+      const center = Math.min(captionParts.length - 1, Math.round((positions[index] ?? (index / limit)) * captionParts.length));
+      const blockSize = limit > 4 ? 4 : 9;
+      const start = Math.max(0, center - Math.floor(blockSize / 2));
+      const block = captionParts.slice(start, Math.min(captionParts.length, start + blockSize));
+      const cue = cleanText(block.map((part) => part.text).join(" "));
+      return { timestamp: block[0]?.timestamp || "", text: cue.slice(0, 300).trim() };
+    });
+  }
+
+  const text = raw.replace(/\s+/g, " ").trim();
+  if (!text) return [];
+
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => cleanText(item))
+    .filter((item) => item.length >= 35);
+  const units = sentences.length >= limit ? sentences : [];
+  if (!units.length) {
+    let cursor = 0;
+    while (cursor < text.length && units.length < 12) {
+      let end = Math.min(text.length, cursor + 260);
+      if (end < text.length) {
+        const boundary = text.lastIndexOf(" ", end);
+        if (boundary > cursor + 160) end = boundary;
+      }
+      const snippet = cleanText(text.slice(cursor, end));
+      if (snippet) units.push(snippet);
+      cursor = end;
+    }
+  }
+
+  if (units.length <= limit) return units.map((item) => ({ timestamp: "", text: item.slice(0, 300).trim() }));
+  return Array.from({ length: limit }, (_, index) => {
+    const position = Math.round((index / Math.max(1, limit - 1)) * (units.length - 1));
+    return { timestamp: "", text: units[position].slice(0, 300).trim() };
+  });
+}
+
+export function sampledSourceEvidence(value, limit = 8) {
+  return sourceEvidenceSnippets(value, limit)
+    .map((snippet, index) => `${snippet.timestamp ? `[${snippet.timestamp}] ` : ""}SOURCE PART ${index + 1}: ${snippet.text}`)
+    .join("\n");
+}
+
+export function parseLessonCoreText(value) {
+  const text = String(value || "").trim();
+  if (!text) return {};
+  if (text.startsWith("{")) return parseStructuredJson(text);
+
+  const fields = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^([A-Z]+\d*):\s*(.*)$/);
+    if (match) fields.set(match[1], cleanText(match[2]));
+  }
+  const keyIdeas = Array.from({ length: 4 }, (_, index) => {
+    const parts = String(fields.get(`IDEA${index + 1}`) || "").split("||").map((part) => cleanText(part));
+    if (!parts[0] && !parts[1]) return null;
+    return {
+      heading: parts[0] || `Key idea ${index + 1}`,
+      explanation: parts[1] || "",
+      example: parts[2] || "",
+      watchOut: parts[3] || "",
+      evidenceQuote: parts[4] || "",
+    };
+  }).filter(Boolean);
+  return {
+    title: fields.get("TITLE") || "",
+    sourceLabel: fields.get("SOURCE") || "",
+    summary: fields.get("SUMMARY") || "",
+    objectives: String(fields.get("OBJECTIVES") || "").split("||").map((item) => cleanText(item)).filter(Boolean),
+    keyIdeas,
+  };
+}
+
+export function sourceGroundedLessonFallback(source) {
+  const title = cleanText(source?.title, "Untitled lesson");
+  const snippets = sourceEvidenceSnippets(source?.text, 4);
+  const keyIdeas = snippets.map((snippet, index) => ({
+    heading: snippet.timestamp ? `Lesson point · ${snippet.timestamp}` : `Lesson point ${index + 1}`,
+    explanation: snippet.text,
+    example: "",
+    watchOut: `Keep this point tied to source segment ${index + 1}.`,
+    evidenceQuote: snippet.text.slice(0, 120).trim(),
+  }));
+  const summary = snippets.slice(0, 3).map((snippet) => snippet.text.slice(0, 130).trim()).join(" ")
+    || `Study the source evidence for ${title}.`;
+  return {
+    title,
+    sourceLabel: cleanText(source?.label, source?.type === "youtube" ? "YouTube lesson" : "Pasted transcript"),
+    summary,
+    objectives: keyIdeas.map((idea) => `Explain ${idea.heading.toLowerCase()} using the saved source.`),
+    keyIdeas,
+  };
+}
+
 export function normalizeLesson(raw, source, now = new Date()) {
   const safe = raw && typeof raw === "object" ? raw : {};
   const title = cleanText(safe.title, cleanText(source.title, "Untitled lesson"));
@@ -85,7 +195,7 @@ export function normalizeLesson(raw, source, now = new Date()) {
         evidenceQuote: cleanText(item.evidenceQuote),
       };
     },
-    7,
+    4,
   );
 
   if (!keyIdeas.length) {
@@ -127,6 +237,37 @@ export function normalizeLesson(raw, source, now = new Date()) {
     }));
   }
 
+  // A repaired, token-limited model response can preserve the key ideas while
+  // losing the later practice collections. Use only fields already grounded in
+  // those ideas to complete the promised six-card deck when the evidence is
+  // rich enough. Sparse lessons stay sparse instead of inventing material.
+  const seenCardAnswers = new Set(flashcards.map((card) => card.back.toLocaleLowerCase()));
+  const addGroundedCard = (front, back, concept) => {
+    const cleanFront = cleanText(front);
+    const cleanBack = cleanText(back);
+    if (!cleanFront || !cleanBack || seenCardAnswers.has(cleanBack.toLocaleLowerCase())) return;
+    flashcards.push({ id: "", front: cleanFront, back: cleanBack, concept: cleanText(concept, cleanFront) });
+    seenCardAnswers.add(cleanBack.toLocaleLowerCase());
+  };
+
+  for (const idea of keyIdeas) {
+    if (flashcards.length >= 6) break;
+    addGroundedCard(`Explain: ${idea.heading}`, idea.explanation, idea.heading);
+  }
+  for (const idea of keyIdeas) {
+    const supplements = [
+      [`Give the lesson example for: ${idea.heading}`, idea.example],
+      [`What should you watch out for with ${idea.heading}?`, idea.watchOut],
+      [`What source cue supports ${idea.heading}?`, idea.evidenceQuote],
+    ];
+    for (const [front, back] of supplements) {
+      if (flashcards.length >= 6) break;
+      addGroundedCard(front, back, idea.heading);
+    }
+    if (flashcards.length >= 6) break;
+  }
+  flashcards = flashcards.slice(0, 6).map((card, index) => ({ ...card, id: `card-${index + 1}` }));
+
   let quiz = cleanObjectArray(
     safe.quiz,
     (item, index) => {
@@ -134,25 +275,38 @@ export function normalizeLesson(raw, source, now = new Date()) {
       const question = cleanText(item.question);
       const options = cleanStringArray(item.options, 4);
       const rawIndex = Number(item.answerIndex);
-      const answerIndex = Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < options.length
-        ? rawIndex
-        : 0;
       if (!question || options.length < 2) return null;
+      const hasValidIndex = Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < options.length;
+      const answerText = cleanText(item.answer || item.correctAnswer).toLocaleLowerCase();
+      const answerTextIndex = answerText
+        ? options.findIndex((option) => option.toLocaleLowerCase() === answerText)
+        : -1;
+      const explanation = cleanText(item.explanation);
+      const explanationIndex = explanation
+        ? options.findIndex((option) => option.toLocaleLowerCase() === explanation.toLocaleLowerCase())
+        : -1;
+      const answerIndex = hasValidIndex
+        ? rawIndex
+        : answerTextIndex >= 0
+          ? answerTextIndex
+          : explanationIndex >= 0
+            ? explanationIndex
+            : 0;
       return {
         id: `question-${index + 1}`,
         question,
         options,
         answerIndex,
-        explanation: cleanText(item.explanation),
+        explanation: explanation || options[answerIndex],
         concept: cleanText(item.concept, question),
       };
     },
-    10,
+    5,
   );
 
-  if (!quiz.length) {
-    const answers = [...new Set(flashcards.map((card) => card.back).filter(Boolean))];
-    quiz = flashcards.slice(0, 6).map((card, index) => {
+  const quizTarget = Math.min(5, flashcards.length);
+  const answers = [...new Set(flashcards.map((card) => card.back).filter(Boolean))];
+  const fallbackQuizItem = (card, index) => {
       const distractors = answers.filter((answer) => answer !== card.back).slice(0, 3);
       const options = [card.back, ...distractors];
       if (options.length < 2) options.push("This point is not supported by the lesson.");
@@ -160,14 +314,27 @@ export function normalizeLesson(raw, source, now = new Date()) {
       options.splice(answerIndex, 0, options.shift());
       return {
         id: `question-${index + 1}`,
-        question: `Which answer best explains “${card.concept}”?`,
+        question: `Which answer best matches “${card.front}”?`,
         options,
         answerIndex,
         explanation: card.back,
         concept: card.concept,
       };
-    });
+    };
+
+  if (!quiz.length) {
+    quiz = flashcards.slice(0, 6).map(fallbackQuizItem);
+  } else if (quiz.length < quizTarget) {
+    const existingAnswers = new Set(quiz.map((item) => item.options[item.answerIndex]).filter(Boolean));
+    for (const card of flashcards) {
+      if (quiz.length >= quizTarget) break;
+      if (existingAnswers.has(card.back)) continue;
+      const item = fallbackQuizItem(card, quiz.length);
+      quiz.push(item);
+      existingAnswers.add(card.back);
+    }
   }
+  quiz = quiz.slice(0, 5).map((item, index) => ({ ...item, id: `question-${index + 1}` }));
 
   let actions = cleanObjectArray(
     safe.actions,
@@ -201,22 +368,34 @@ export function normalizeLesson(raw, source, now = new Date()) {
     ? keyIdeas
     : objectives.map((text) => ({ heading: cleanText(text), explanation: cleanText(text) }));
 
-  if (!actions.length) {
-    actions = practiceSeeds.slice(0, 5).map((idea, index) => ({
+  const derivedActions = practiceSeeds.slice(0, 3).map((idea, index) => ({
       text: `Explain “${idea.heading}” from memory, then check each claim against the lesson evidence.`,
       dueHint: index === 0 ? "Start today" : "Next study session",
     }));
+  const actionTexts = new Set(actions.map((item) => item.text));
+  for (const action of derivedActions) {
+    if (actions.length >= 3) break;
+    if (actionTexts.has(action.text)) continue;
+    actions.push(action);
+    actionTexts.add(action.text);
   }
+  actions = actions.slice(0, 3);
 
-  if (!roadmap.length) {
-    roadmap = practiceSeeds.slice(0, 5).map((idea, index) => ({
+  const derivedRoadmap = practiceSeeds.slice(0, 3).map((idea, index) => ({
       title: idea.heading || `Lesson idea ${index + 1}`,
       why: idea.explanation
         ? `Review this source-grounded idea before moving on: ${idea.explanation}`
         : "Review this source-grounded idea before moving on.",
       minutes: 15,
     }));
+  const roadmapTitles = new Set(roadmap.map((item) => item.title));
+  for (const step of derivedRoadmap) {
+    if (roadmap.length >= 3) break;
+    if (roadmapTitles.has(step.title)) continue;
+    roadmap.push(step);
+    roadmapTitles.add(step.title);
   }
+  roadmap = roadmap.slice(0, 3);
 
   const cheat = safe.cheatSheet && typeof safe.cheatSheet === "object" ? safe.cheatSheet : {};
   const fallbackEssentials = practiceSeeds
@@ -417,6 +596,12 @@ function mentorTerms(value) {
 }
 
 export function groundedMentorFallback(lesson, question) {
+  const normalizedQuestion = cleanText(question).toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  if (/^(hi|hello|hey|hiya|yo|good morning|good afternoon|good evening)$/.test(normalizedQuestion)) {
+    const title = cleanText(lesson?.title, "this lesson");
+    return `Hi! I’m ready to help with “${title}.” Ask me to explain, compare, recap, or quiz you on a lesson idea.`;
+  }
+
   const queryTerms = new Set(mentorTerms(question));
   const ideas = Array.isArray(lesson?.keyIdeas) ? lesson.keyIdeas : [];
   const ranked = ideas.map((idea, index) => {
@@ -436,6 +621,32 @@ export function groundedMentorFallback(lesson, question) {
   return answer.filter(Boolean).join("\n\n");
 }
 
+export function mentorAnswerText(value, lesson, question) {
+  const raw = String(value || "").trim();
+  if (!raw) return groundedMentorFallback(lesson, question);
+
+  let parsed = null;
+  if (/^(?:```(?:json)?\s*)?\{/i.test(raw)) {
+    try {
+      parsed = parseStructuredJson(raw);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const directAnswer = cleanText(parsed.answer || parsed.message || parsed.text);
+    if (directAnswer) return directAnswer;
+    return groundedMentorFallback(lesson, question);
+  }
+
+  if (/"(?:flashcards|keyIdeas|cheatSheet|suggestedQuestions)"\s*:/i.test(raw)) {
+    return groundedMentorFallback(lesson, question);
+  }
+
+  return raw;
+}
+
 export function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -451,12 +662,34 @@ export function clampText(value, limit) {
 }
 
 export function transcriptToolErrorMessage(error) {
+  const code = String(error?.code || error?.data?.code || "").trim().toUpperCase();
   const message = String(error?.message || error || "").trim();
+  if (code === "INVALID_YOUTUBE_URL") {
+    return "That does not look like a valid YouTube video link. Paste a watch, share, Shorts, live, or embed URL.";
+  }
+  if (code === "CAPTIONS_DISABLED") {
+    return "Captions are disabled for this video. Choose Paste transcript to continue with your own transcript.";
+  }
+  if (code === "NO_TRANSCRIPT") {
+    return "No usable captions were found for this video. Choose Paste transcript to continue with your own transcript.";
+  }
+  if (code === "VIDEO_UNAVAILABLE") {
+    return "This video is private, unavailable, or region restricted, so its captions cannot be retrieved. Choose Paste transcript to continue.";
+  }
+  if (code === "YOUTUBE_BLOCKED") {
+    return "YouTube's public caption service could not reach this video from the current Agent. Retry in a moment, or choose Paste transcript to continue.";
+  }
+  if (code === "TRANSCRIPT_TIMEOUT") {
+    return "Caption retrieval timed out while contacting YouTube. The video may be temporarily slow or rate-limited; retry once, or choose Paste transcript to continue.";
+  }
+  if (code === "EMPTY_TRANSCRIPT") {
+    return "YouTube returned captions, but they contained no readable text. Choose Paste transcript to continue.";
+  }
   if (/not deployed on the selected agent|not installed on the selected agent/i.test(message)) {
     return "The transcript helper is not ready on this Anna Agent yet. Update or reinstall LearnTube AI for this agent, then retry—or choose Paste transcript to continue now.";
   }
   if (/timed?\s*out|timeout/i.test(message)) {
-    return "The transcript helper took too long to respond. Retry once, or choose Paste transcript to continue now.";
+    return "Caption retrieval timed out while contacting YouTube. The video may be temporarily slow or rate-limited; retry once, or choose Paste transcript to continue.";
   }
   return message
     ? `${message} You can still use this lesson by choosing Paste transcript.`

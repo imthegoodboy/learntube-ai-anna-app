@@ -8,7 +8,7 @@ const loadJson = async (relativePath) => JSON.parse(
 
 test("release versions stay aligned", async () => {
   const [app, pkg] = await Promise.all([loadJson("app.json"), loadJson("package.json")]);
-  assert.equal(app.version, "1.0.12");
+  assert.equal(app.version, "1.0.13");
   assert.equal(pkg.version, app.version);
 });
 
@@ -26,7 +26,7 @@ test("the transcript helper remains bundled at the reviewed minimum version", as
   assert.equal(app.bundled_executas["youtube-transcript"].path, "./executas/my-first-anna-app");
   assert.deepEqual(manifest.required_executas, [{
     tool_id: "bundled:youtube-transcript",
-    min_version: "1.0.4",
+    min_version: "1.0.5",
     version: "latest",
   }]);
   assert.deepEqual(manifest.ui.host_api.tools, ["required:bundled:youtube-transcript"]);

@@ -2921,3 +2921,43 @@ executas/my-first-anna-app/test_plugin.py`; direct-test the supplied URL;
 verify Notes, Cards, Quiz, Roadmap, Mentor, PDF export, and storage writes;
 then `apps push`, cut `1.0.12`, sync metadata, submit review, and confirm the
 new `review_candidate_version`. Never call `apps release` while it is pending.
+
+## LearnTube AI 1.0.13 / transcript helper 1.0.5 local reliability follow-up (2026-08-31)
+
+The second audit URL was
+`https://youtu.be/vf-cxgUXcMk?si=yptIaQmq1YHKlLHV`, the Jenny's Lectures CS IT
+BFS/DFS lesson. The old Anna-harness request stalled until the 92-second
+Executa limit, but the same 1.0.4 Windows binary and the live Python source
+both retrieved the video in under four seconds with 403 English caption
+segments. This evidence distinguishes a transient/unbounded network stall
+from an invalid URL, long-video limit, unavailable video, or missing captions.
+
+The local candidate bounds `youtube-transcript-api` connect/read requests with
+a finite `requests.Session` timeout, keeps the caption-edge fallback bounded,
+and returns `TRANSCRIPT_TIMEOUT` separately from `CAPTIONS_DISABLED`,
+`NO_TRANSCRIPT`, `VIDEO_UNAVAILABLE`, and `YOUTUBE_BLOCKED`. The App transcript
+call now allows 180 seconds for legitimate long retrievals and maps each
+failure code to a concise user-facing recovery message that offers Paste
+transcript. The candidate also normalizes repaired quiz JSON that contains an
+answer string (for example `"answer": "Insert tab"`) so the matching option,
+not option zero, is marked correct; partial quiz output is backfilled from
+existing lesson cards.
+
+This candidate is local only: do not push, cut, submit, or release it until
+the four native 1.0.5 helper artifacts are built. Before that gate, run
+`npm test`, `anna-app validate --strict`, the Executa pytest suite, the packaged
+Windows helper against both the BFS/DFS URL and a known working URL, then run
+the local Anna harness for manual Notes/Cards/Quiz/Mentor/PDF testing.
+
+The final curriculum audit used
+`https://youtu.be/ld4UD98yHio?si=adEYEXejBlmu9F25`. Qwen 3.7 Plus consumed its
+entire output allowance as hidden reasoning and returned an empty visible text
+field for the curriculum request, although Mentor completion remained healthy.
+The App now sends eight compact timestamped evidence samples, asks only for a
+small lesson core, and uses Anna's soft fast-model preference. On the same
+lecture, Gemini 3 Flash returned a semantic core in about three seconds; the UI
+rendered four named ideas, six cards, five quiz prompts, three actions, and
+three roadmap steps. If routing or completion still fails, a concise
+source-evidence fallback creates the same complete workspace instead of an
+error. Mentor output is unwrapped or rejected when it resembles lesson JSON,
+then replaced with a saved-evidence answer.

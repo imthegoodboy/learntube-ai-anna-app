@@ -4,9 +4,9 @@ Official end-to-end guide: https://forum.anna.partners/t/build-on-anna-101/228
 
 Current candidate:
 
-- App: `learntube-study` v1.0.12
+- App: `learntube-study` v1.0.13 (local candidate; not uploaded)
 - Bundled handle: `youtube-transcript`
-- Executa: `tool-nikku696969-learntube-study-transcript-ujzngt7x` v1.0.4
+- Executa: `tool-nikku696969-learntube-study-transcript-ujzngt7x` v1.0.5 (local candidate; build artifacts pending)
 - Review video: `https://www.youtube.com/watch?v=97BK06JjDmE`
 
 ## Local gate
@@ -28,12 +28,12 @@ Follow the current single-command publish flow:
 anna-app apps publish --account https://anna.partners --json
 ```
 
-Then install v1.0.12 and confirm all of the following before review submission:
+After the four v1.0.5 helper artifacts are built and the app is uploaded, install v1.0.13 and confirm all of the following before review submission:
 
-1. The permission dialog identifies `learntube-study · v1.0.12` and declares `llm.complete`, `agent.auto`, and `agent.fixed`.
+1. The permission dialog identifies `learntube-study · v1.0.13` and declares `llm.complete`, `agent.auto`, and `agent.fixed`.
 2. `anna-app apps grants learntube-study --account https://anna.partners --json` reports `satisfied: true` and no missing scopes.
 3. The immutable version manifest resolves `bundled:youtube-transcript` to the formal Executa tool ID.
-4. The Cloud Agent reports the helper installed, loaded, running, and at v1.0.4.
+4. The Cloud Agent reports the helper installed, loaded, running, and at v1.0.5.
 5. The review YouTube URL reaches caption retrieval without an API key or OAuth prompt, then generates the saved study workspace.
 6. The Marketplace listing contains the three product screenshots from `assets/screenshots/`.
 

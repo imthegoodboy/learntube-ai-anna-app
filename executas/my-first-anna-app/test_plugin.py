@@ -21,7 +21,7 @@ def test_production_agent_handshake() -> None:
         "id": 1,
         "result": {
             "protocolVersion": "2.0",
-            "serverInfo": {"name": "LearnTube Study Transcript", "version": "1.0.4"},
+            "serverInfo": {"name": "LearnTube Study Transcript", "version": "1.0.5"},
             "client_capabilities": {},
             "capabilities": {},
         },
@@ -128,6 +128,30 @@ def test_fetch_transcript_falls_back_to_first_available_language() -> None:
         result = plugin._fetch_transcript("UF8uR6Z6KLc", ["en"])
     assert result["languageCode"] == "es"
     assert result["transcript"] == "[00:00] Hello"
+
+
+def test_bounded_session_adds_finite_timeout_when_library_omits_one() -> None:
+    with patch.object(plugin.requests.Session, "request", return_value=object()) as request:
+        session = plugin._BoundedSession()
+        session.request("GET", "https://example.test/captions")
+    assert request.call_args.kwargs["timeout"] == (
+        plugin.NETWORK_CONNECT_TIMEOUT_SECONDS,
+        plugin.NETWORK_READ_TIMEOUT_SECONDS,
+    )
+
+
+def test_transcript_timeout_returns_a_stable_user_facing_code() -> None:
+    with patch.object(
+        plugin,
+        "_fetch_transcript",
+        side_effect=plugin.requests.exceptions.ReadTimeout("caption request stalled"),
+    ), patch.object(plugin, "_fetch_edge_transcript", side_effect=TimeoutError("edge stalled")):
+        result = plugin.transcript_result({"url": "https://youtu.be/vf-cxgUXcMk"})
+    assert result == {
+        "ok": False,
+        "code": "TRANSCRIPT_TIMEOUT",
+        "message": "Caption retrieval timed out while contacting YouTube.",
+    }
 
 
 def test_cloud_ip_block_uses_keyless_caption_edge_fallback() -> None:
