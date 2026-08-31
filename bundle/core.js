@@ -169,7 +169,7 @@ export function normalizeLesson(raw, source, now = new Date()) {
     });
   }
 
-  const actions = cleanObjectArray(
+  let actions = cleanObjectArray(
     safe.actions,
     (item) => {
       if (typeof item === "string") return { text: cleanText(item), dueHint: "" };
@@ -180,7 +180,7 @@ export function normalizeLesson(raw, source, now = new Date()) {
     8,
   );
 
-  const roadmap = cleanObjectArray(
+  let roadmap = cleanObjectArray(
     safe.roadmap,
     (item) => {
       if (!item || typeof item !== "object") return null;
@@ -192,7 +192,49 @@ export function normalizeLesson(raw, source, now = new Date()) {
     8,
   );
 
+  // The host may stop a long JSON response at its output-token ceiling. Keep
+  // every declared workspace surface useful in that case by deriving concise
+  // practice items from the model's already-grounded ideas/objectives. These
+  // are not invented lesson facts; they are study prompts about content that
+  // is already present in the normalized lesson.
+  const practiceSeeds = keyIdeas.length
+    ? keyIdeas
+    : objectives.map((text) => ({ heading: cleanText(text), explanation: cleanText(text) }));
+
+  if (!actions.length) {
+    actions = practiceSeeds.slice(0, 5).map((idea, index) => ({
+      text: `Explain “${idea.heading}” from memory, then check each claim against the lesson evidence.`,
+      dueHint: index === 0 ? "Start today" : "Next study session",
+    }));
+  }
+
+  if (!roadmap.length) {
+    roadmap = practiceSeeds.slice(0, 5).map((idea, index) => ({
+      title: idea.heading || `Lesson idea ${index + 1}`,
+      why: idea.explanation
+        ? `Review this source-grounded idea before moving on: ${idea.explanation}`
+        : "Review this source-grounded idea before moving on.",
+      minutes: 15,
+    }));
+  }
+
   const cheat = safe.cheatSheet && typeof safe.cheatSheet === "object" ? safe.cheatSheet : {};
+  const fallbackEssentials = practiceSeeds
+    .map((idea) => [idea.heading, idea.explanation].filter(Boolean).join(": "))
+    .filter(Boolean)
+    .slice(0, 6);
+  const fallbackWorkflow = [
+    "Read one key idea and its source evidence.",
+    "Close the source and explain the idea from memory.",
+    "Reopen the source and correct any unsupported or missing detail.",
+  ];
+  const fallbackTraps = keyIdeas.map((idea) => cleanText(idea.watchOut)).filter(Boolean).slice(0, 6);
+  if (!fallbackTraps.length) fallbackTraps.push("Do not add claims that are not supported by this lesson.");
+  const suggestedQuestions = cleanStringArray(safe.suggestedQuestions, 5);
+  if (!suggestedQuestions.length) {
+    suggestedQuestions.push(...practiceSeeds.slice(0, 5).map((idea) =>
+      `Can you explain “${idea.heading}” using the evidence and example from this lesson?`));
+  }
   const createdAt = now.toISOString();
   const id = source.id || createId(now.getTime());
 
@@ -218,11 +260,17 @@ export function normalizeLesson(raw, source, now = new Date()) {
     roadmap,
     cheatSheet: {
       headline: cleanText(cheat.headline, summary),
-      essentials: cleanStringArray(cheat.essentials, 8),
-      workflow: cleanStringArray(cheat.workflow, 8),
-      traps: cleanStringArray(cheat.traps, 6),
+      essentials: cleanStringArray(cheat.essentials, 8).length
+        ? cleanStringArray(cheat.essentials, 8)
+        : fallbackEssentials,
+      workflow: cleanStringArray(cheat.workflow, 8).length
+        ? cleanStringArray(cheat.workflow, 8)
+        : fallbackWorkflow,
+      traps: cleanStringArray(cheat.traps, 6).length
+        ? cleanStringArray(cheat.traps, 6)
+        : fallbackTraps,
     },
-    suggestedQuestions: cleanStringArray(safe.suggestedQuestions, 5),
+    suggestedQuestions,
     progress: {
       cards: {},
       quizAnswers: {},

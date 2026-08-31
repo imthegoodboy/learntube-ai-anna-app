@@ -8,7 +8,7 @@ const loadJson = async (relativePath) => JSON.parse(
 
 test("release versions stay aligned", async () => {
   const [app, pkg] = await Promise.all([loadJson("app.json"), loadJson("package.json")]);
-  assert.equal(app.version, "1.0.11");
+  assert.equal(app.version, "1.0.12");
   assert.equal(pkg.version, app.version);
 });
 

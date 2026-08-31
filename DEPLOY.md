@@ -4,7 +4,7 @@ Official end-to-end guide: https://forum.anna.partners/t/build-on-anna-101/228
 
 Current candidate:
 
-- App: `learntube-study` v1.0.11
+- App: `learntube-study` v1.0.12
 - Bundled handle: `youtube-transcript`
 - Executa: `tool-nikku696969-learntube-study-transcript-ujzngt7x` v1.0.4
 - Review video: `https://www.youtube.com/watch?v=97BK06JjDmE`
@@ -28,9 +28,9 @@ Follow the current single-command publish flow:
 anna-app apps publish --account https://anna.partners --json
 ```
 
-Then install v1.0.11 and confirm all of the following before review submission:
+Then install v1.0.12 and confirm all of the following before review submission:
 
-1. The permission dialog identifies `learntube-study · v1.0.11` and declares `llm.complete`, `agent.auto`, and `agent.fixed`.
+1. The permission dialog identifies `learntube-study · v1.0.12` and declares `llm.complete`, `agent.auto`, and `agent.fixed`.
 2. `anna-app apps grants learntube-study --account https://anna.partners --json` reports `satisfied: true` and no missing scopes.
 3. The immutable version manifest resolves `bundled:youtube-transcript` to the formal Executa tool ID.
 4. The Cloud Agent reports the helper installed, loaded, running, and at v1.0.4.

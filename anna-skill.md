@@ -2884,3 +2884,40 @@ It is `pending_review` and `is_published: false`; do not call `apps release`
 until approval. If the owner account still has `1.0.1` installed, treat that
 as an install-state check—not a candidate failure—and install the exact `1.0.2`
 candidate through Anna before claiming manual runtime verification.
+
+## LearnTube AI 1.0.12 production audit (2026-08-31)
+
+The supplied real-world audit URL was
+`https://youtu.be/5hPfm_uqXmw?si=nj8HyuOdJRn7q3wn`. The bundled
+`LearnTube Study Transcript` Executa returned `ok: true`, canonical video ID
+`5hPfm_uqXmw`, the Jenny's Lectures CS IT title, English auto-generated
+captions, 220 timestamped segments, 733.03 seconds, and an untruncated
+transcript. The local Anna harness log therefore proves the former direct-URL
+failure is resolved; do not downgrade a successful tool response because the
+source is a YouTube share URL.
+
+The same audit exposed an important host-model edge case: a long final JSON
+generation can stop at the Host LLM's 4096-token ceiling. A malformed-response
+repair may then return only title/summary/objectives. `normalizeLesson` must
+always backfill every declared surface (key ideas, cards, quiz, actions,
+roadmap, cheat-sheet essentials/workflow/traps, and mentor starter questions)
+from already-normalized source-grounded ideas. These fallbacks must describe
+practice about existing evidence, never invent lesson facts. Keep the
+generation prompt compact (about 3000 output tokens, concise strings) and keep
+the deterministic normalization fallback even when the model normally returns
+the full schema.
+
+For a local harness run, repeated `window.ready` transport errors after the
+dev process is stopped are expected teardown noise, not an app failure. Judge
+the preceding RPC sequence: `window.hello` exposes the required transcript
+tool, `llm.complete` succeeds, and `storage.set` succeeds for the lesson,
+profile, and index. Local dev's legacy runtime storage is session-scoped;
+cross-session persistence must be verified on Anna Storage with an installed
+candidate, not inferred from a new local-runtime window.
+
+LearnTube 1.0.12 release gate: run `npm test`, `anna-app validate --strict`,
+and `uv run --project executas/my-first-anna-app --with pytest pytest
+executas/my-first-anna-app/test_plugin.py`; direct-test the supplied URL;
+verify Notes, Cards, Quiz, Roadmap, Mentor, PDF export, and storage writes;
+then `apps push`, cut `1.0.12`, sync metadata, submit review, and confirm the
+new `review_candidate_version`. Never call `apps release` while it is pending.

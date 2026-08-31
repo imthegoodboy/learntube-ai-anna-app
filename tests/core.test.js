@@ -94,6 +94,12 @@ test("normalizeLesson derives source-grounded practice when the model omits coll
   assert.equal(lesson.keyIdeas.length, 3);
   assert.equal(lesson.flashcards.length, 3);
   assert.equal(lesson.quiz.length, 3);
+  assert.equal(lesson.actions.length, 3);
+  assert.equal(lesson.roadmap.length, 3);
+  assert.equal(lesson.cheatSheet.essentials.length, 3);
+  assert.equal(lesson.cheatSheet.workflow.length, 3);
+  assert.ok(lesson.cheatSheet.traps.length >= 1);
+  assert.equal(lesson.suggestedQuestions.length, 3);
   assert.deepEqual(lesson.flashcards.map((card) => card.back), objectives);
   for (const question of lesson.quiz) {
     assert.equal(question.options[question.answerIndex], question.explanation);
