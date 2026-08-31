@@ -2835,3 +2835,43 @@ review but not public; do not run `apps release` until Anna approves it.
 - Refreshing listing screenshots after a UI change is part of the submission,
   not a cosmetic afterthought. Keep the local screenshot paths in `app.json`
   and run `apps sync-meta` before resubmission.
+
+## Casefile Zero marketplace presentation notes
+
+Casefile Zero is a tool-less, deterministic detective game. Its Anna value is
+the interactive evidence workflow and persistence—not a bundled Executa:
+
+```text
+detective setup -> scene clues -> suspect interrogation -> evidence links
+-> timeline reconstruction -> supported accusation -> closure/rank -> archive
+```
+
+For this kind of app:
+
+- Declare `required_executas: []` and `optional_executas: []` explicitly in the
+  manifest, keep `ui.host_api.agent.tools` empty, and state the intentional
+  tool-less architecture in `app.json`, README, and DEPLOY docs.
+- Keep `llm.complete` optional and case-grounded for custom dialogue; keep all
+  evidence, deductions, timelines, and accusation scoring deterministic so
+  gameplay remains reliable offline.
+- Declare both saveable Agent session modes (`auto: true` and
+  `fixed: { client_ids: [] }`) when the Anna permission UI exposes those
+  capabilities. Validate with `anna-app validate --strict` before publishing.
+- A listing with only three screenshots can be marked down even when the game
+  works. Show a narrative gallery of real product states: desk, scene, suspect
+  interview, evidence board, timeline, and result. Use local files in
+  `app.json` and sync them after publishing.
+- Expand the Marketplace description beyond a tagline: explain the complete
+  gameplay loop, four-case anthology, persistence, optional AI dialogue, and
+  the absence of a separate account/API key without inventing claims.
+- Keep a repeatable capture script that seeds only deterministic, solved or
+  partially investigated states. Generate screenshots from the shipped bundle,
+  inspect them at desktop size, and run browser smoke after adding assets.
+
+Casefile Zero review follow-up (2026-08-31): the gameplay loop already passed
+end to end, so the safe remediation was metadata/assets/docs only. Bump the
+app/package/lock versions together, increase the screenshot list, rerun unit,
+strict-manifest, browser, and Anna-harness tests, then push/cut the next
+candidate. Do not use a public-release action while review is pending; verify
+`apps status` and report `review_candidate_version` separately from
+`is_published`.
